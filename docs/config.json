@@ -51,6 +51,10 @@
           "to": "guides/agentic-cycle"
         },
         {
+          "label": "Structured Outputs",
+          "to": "guides/structured-outputs"
+        },
+        {
           "label": "Streaming",
           "to": "guides/streaming"
         },
@@ -118,6 +122,10 @@
         {
           "label": "@tanstack/ai-solid",
           "to": "api/ai-solid"
+        },
+        {
+          "label": "@tanstack/ai-preact",
+          "to": "api/ai-preact"
         }
       ]
     },
@@ -127,6 +135,10 @@
         {
           "label": "OpenAI",
           "to": "adapters/openai"
+        },
+        {
+          "label": "OpenRouter",
+          "to": "adapters/openrouter"
         },
         {
           "label": "Anthropic",
@@ -139,6 +151,31 @@
         {
           "label": "Ollama",
           "to": "adapters/ollama"
+        },
+        {
+          "label": "Grok (xAI)",
+          "to": "adapters/grok"
+        }
+      ]
+    },
+    {
+      "label": "Community Adapters",
+      "children": [
+        {
+          "label": "Community Adapters Guide",
+          "to": "community-adapters/guide"
+        },
+        {
+          "label": "Cencori",
+          "to": "community-adapters/cencori"
+        },
+        {
+          "label": "Decart",
+          "to": "community-adapters/decart"
+        },
+        {
+          "label": "Soniox",
+          "to": "community-adapters/soniox"
         }
       ]
     },
@@ -255,8 +292,8 @@
           "to": "reference/functions/toServerSentEventsStream"
         },
         {
-          "label": "toStreamResponse",
-          "to": "reference/functions/toStreamResponse"
+          "label": "toServerSentEventsResponse",
+          "to": "reference/functions/toServerSentEventsResponse"
         },
         {
           "label": "toolDefinition",

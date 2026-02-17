@@ -5,12 +5,14 @@ import {
   chat,
   createChatOptions,
   maxIterations,
-  toServerSentEventsStream,
+  toServerSentEventsResponse,
 } from '@tanstack/ai'
 import { anthropicText } from '@tanstack/ai-anthropic'
 import { geminiText } from '@tanstack/ai-gemini'
+import { grokText } from '@tanstack/ai-grok'
 import { openaiText } from '@tanstack/ai-openai'
 import { ollamaText } from '@tanstack/ai-ollama'
+import { openRouterText } from '@tanstack/ai-openrouter'
 import type { AIAdapter, StreamChunk } from '@tanstack/ai'
 import type { ChunkRecording } from '@/lib/recording'
 import {
@@ -51,7 +53,13 @@ const addToCartToolServer = addToCartToolDef.server((args) => ({
   totalItems: args.quantity,
 }))
 
-type Provider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
+type Provider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'ollama'
+  | 'grok'
+  | 'openrouter'
 
 /**
  * Wraps an adapter to intercept chatStream and record raw chunks from the adapter
@@ -172,6 +180,10 @@ export const Route = createFileRoute('/api/chat')({
               createChatOptions({
                 adapter: geminiText((model || 'gemini-2.0-flash') as any),
               }),
+            grok: () =>
+              createChatOptions({
+                adapter: grokText((model || 'grok-3') as any),
+              }),
             ollama: () =>
               createChatOptions({
                 adapter: ollamaText((model || 'mistral:7b') as any),
@@ -179,6 +191,10 @@ export const Route = createFileRoute('/api/chat')({
             openai: () =>
               createChatOptions({
                 adapter: openaiText((model || 'gpt-4o') as any),
+              }),
+            openrouter: () =>
+              createChatOptions({
+                adapter: openRouterText((model || 'openai/gpt-4o') as any),
               }),
           }
 
@@ -231,17 +247,7 @@ export const Route = createFileRoute('/api/chat')({
             abortController,
           })
 
-          const readableStream = toServerSentEventsStream(
-            stream,
-            abortController,
-          )
-          return new Response(readableStream, {
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              Connection: 'keep-alive',
-            },
-          })
+          return toServerSentEventsResponse(stream, { abortController })
         } catch (error: any) {
           console.error('[API Route] Error in chat request:', {
             message: error?.message,

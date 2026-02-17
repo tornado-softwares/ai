@@ -23,8 +23,8 @@ First, create an API route that handles chat requests. Here's a simplified examp
 ### TanStack Start
 
 ```typescript
-import { chat, toStreamResponse } from "@tanstack/ai";
-import { openai } from "@tanstack/ai-openai";
+import { chat, toServerSentEventsResponse } from "@tanstack/ai";
+import { openaiText } from "@tanstack/ai-openai";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/chat")({
@@ -49,14 +49,13 @@ export const Route = createFileRoute("/api/chat")({
         try {
           // Create a streaming chat response
           const stream = chat({
-            adapter: openai(),
+            adapter: openaiText("gpt-5.2"),
             messages,
-            model: "gpt-4o",
             conversationId,
           });
 
           // Convert stream to HTTP response
-          return toStreamResponse(stream);
+          return toServerSentEventsResponse(stream);
         } catch (error) {
           return new Response(
             JSON.stringify({
@@ -78,7 +77,7 @@ export const Route = createFileRoute("/api/chat")({
 ### Next.js
 
 ```typescript
-import { chat, toStreamResponse } from "@tanstack/ai";
+import { chat, toServerSentEventsResponse } from "@tanstack/ai";
 import { openaiText } from "@tanstack/ai-openai";
 
 export async function POST(request: Request) {
@@ -100,13 +99,13 @@ export async function POST(request: Request) {
   try {
     // Create a streaming chat response
     const stream = chat({
-      adapter: openaiText("gpt-4o"),
+      adapter: openaiText("gpt-5.2"),
       messages,
       conversationId
     });
 
     // Convert stream to HTTP response
-    return toStreamResponse(stream);
+    return toServerSentEventsResponse(stream);
   } catch (error) {
     return new Response(
       JSON.stringify({
@@ -248,7 +247,7 @@ const getProducts = getProductsDef.server(async ({ query }) => {
 })
 
 chat({
-  adapter: openaiText('gpt-4o'),
+  adapter: openaiText('gpt-5.2'),
   messages: [{ role: 'user', content: 'Find products' }],
   tools: [getProducts]
 })

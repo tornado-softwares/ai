@@ -3,12 +3,14 @@ import {
   chat,
   createChatOptions,
   maxIterations,
-  toServerSentEventsStream,
+  toServerSentEventsResponse,
 } from '@tanstack/ai'
 import { openaiText } from '@tanstack/ai-openai'
 import { ollamaText } from '@tanstack/ai-ollama'
 import { anthropicText } from '@tanstack/ai-anthropic'
 import { geminiText } from '@tanstack/ai-gemini'
+import { openRouterText } from '@tanstack/ai-openrouter'
+import { grokText } from '@tanstack/ai-grok'
 import type { AnyTextAdapter } from '@tanstack/ai'
 import {
   addToCartToolDef,
@@ -18,7 +20,13 @@ import {
   recommendGuitarToolDef,
 } from '@/lib/guitar-tools'
 
-type Provider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
+type Provider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'ollama'
+  | 'grok'
+  | 'openrouter'
 
 const SYSTEM_PROMPT = `You are a helpful assistant for a guitar store.
 
@@ -84,19 +92,43 @@ export const Route = createFileRoute('/api/tanchat')({
                 (model || 'claude-sonnet-4-5') as 'claude-sonnet-4-5',
               ),
             }),
+          openrouter: () =>
+            createChatOptions({
+              adapter: openRouterText('openai/gpt-5.1'),
+              modelOptions: {
+                models: ['openai/chatgpt-4o-latest'],
+                route: 'fallback',
+                reasoning: {
+                  effort: 'medium',
+                },
+              },
+            }),
           gemini: () =>
             createChatOptions({
               adapter: geminiText(
                 (model || 'gemini-2.5-flash') as 'gemini-2.5-flash',
               ),
+              modelOptions: {
+                thinkingConfig: {
+                  includeThoughts: true,
+                  thinkingBudget: 100,
+                },
+              },
+            }),
+          grok: () =>
+            createChatOptions({
+              adapter: grokText((model || 'grok-3') as 'grok-3'),
+              modelOptions: {},
             }),
           ollama: () =>
             createChatOptions({
-              adapter: ollamaText((model || 'mistral:7b') as 'mistral:7b'),
+              adapter: ollamaText((model || 'gpt-oss:120b') as 'gpt-oss:120b'),
+              modelOptions: { think: 'low', options: { top_k: 1 } },
             }),
           openai: () =>
             createChatOptions({
               adapter: openaiText((model || 'gpt-4o') as 'gpt-4o'),
+              modelOptions: {},
             }),
         }
 
@@ -122,17 +154,7 @@ export const Route = createFileRoute('/api/tanchat')({
             abortController,
             conversationId,
           })
-          const readableStream = toServerSentEventsStream(
-            stream,
-            abortController,
-          )
-          return new Response(readableStream, {
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              Connection: 'keep-alive',
-            },
-          })
+          return toServerSentEventsResponse(stream, { abortController })
         } catch (error: any) {
           console.error('[API Route] Error in chat request:', {
             message: error?.message,

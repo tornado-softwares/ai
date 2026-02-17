@@ -69,7 +69,7 @@ sequenceDiagram
 **Server (API Route):**
 
 ```typescript
-import { chat, toStreamResponse } from "@tanstack/ai";
+import { chat, toServerSentEventsResponse } from "@tanstack/ai";
 import { openaiText } from "@tanstack/ai-openai";
 import { getWeather, sendEmail } from "./tools";
 
@@ -78,12 +78,12 @@ export async function POST(request: Request) {
 
   // Create streaming chat with tools
   const stream = chat({
-    adapter: openaiText("gpt-4o"),
+    adapter: openaiText("gpt-5.2"),
     messages,
     tools: [getWeather, sendEmail], // Tool definitions passed here
   });
 
-  return toStreamResponse(stream);
+  return toServerSentEventsResponse(stream);
 }
 ```
 

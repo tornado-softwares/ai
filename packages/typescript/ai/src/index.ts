@@ -77,8 +77,9 @@ export { convertSchemaToJsonSchema } from './activities/chat/tools/schema-conver
 export {
   streamToText,
   toServerSentEventsStream,
-  toStreamResponse,
+  toServerSentEventsResponse,
   toHttpStream,
+  toHttpResponse,
 } from './stream-to-response'
 
 // Tool call management
@@ -94,8 +95,11 @@ export {
 // All types
 export * from './types'
 
-// Event client
-export { aiEventClient } from './event-client'
+// Utility functions
+export { detectImageMimeType } from './utils'
+
+// Event client + event types
+export * from './event-client'
 
 // Message converters
 export {
@@ -127,7 +131,6 @@ export type {
   ProcessorResult,
   ProcessorState,
   StreamProcessorEvents,
-  StreamProcessorHandlers,
   StreamProcessorOptions,
   ToolCallState,
   ToolResultState,

@@ -188,7 +188,7 @@ import { chat } from "@tanstack/ai";
 import { openaiText } from "@tanstack/ai-openai";
 
 const stream = chat({
-  adapter: openaiText("gpt-4o"),
+  adapter: openaiText("gpt-5.2"),
   messages: [{ role: "user", content: "Hello!" }],
   tools: [myTool],
   systemPrompts: ["You are a helpful assistant"],
@@ -198,7 +198,7 @@ const stream = chat({
 
 ### Parameters
 
-- `adapter` - An AI adapter instance with model (e.g., `openaiText('gpt-4o')`)
+- `adapter` - An AI adapter instance with model (e.g., `openaiText('gpt-5.2')`, `anthropicText('claude-sonnet-4-5')`)
 - `messages` - Array of chat messages
 - `tools?` - Array of tools for function calling
 - `systemPrompts?` - System prompts to prepend to messages
@@ -211,6 +211,34 @@ const stream = chat({
 An async iterable of `StreamChunk`.
 
 ---
+
+## `summarize(options)`
+
+Creates a text summarization.
+
+```typescript
+import { summarize } from "@tanstack/ai";
+import { openaiSummarize } from "@tanstack/ai-openai";
+
+const result = await summarize({
+  adapter: openaiSummarize("gpt-5.2"),
+  text: "Long text to summarize...",
+  maxLength: 100,
+  style: "concise",
+});
+```
+
+### Parameters
+
+- `adapter` - An AI adapter instance with model
+- `text` - Text to summarize
+- `maxLength?` - Maximum length of summary
+- `style?` - Summary style ("concise" | "detailed")
+- `modelOptions?` - Model-specific options
+
+### Returns
+
+A `SummarizationResult` with the summary text.
 
 ## `toolDefinition(config)`
 
