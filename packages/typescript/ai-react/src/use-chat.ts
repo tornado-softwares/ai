@@ -52,7 +52,6 @@ export function useChat<TTools extends ReadonlyArray<AnyClientTool> = any>(
 
     return new ChatClient({
       connection: optionsRef.current.connection,
-      session: optionsRef.current.session,
       id: clientId,
       initialMessages: messagesToUse,
       body: optionsRef.current.body,

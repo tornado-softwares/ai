@@ -35,7 +35,6 @@ export function useChat<TTools extends ReadonlyArray<AnyClientTool> = any>(
   const client = createMemo(() => {
     return new ChatClient({
       connection: options.connection,
-      session: options.session,
       id: clientId,
       initialMessages: options.initialMessages,
       body: options.body,

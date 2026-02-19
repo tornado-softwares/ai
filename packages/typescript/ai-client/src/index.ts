@@ -27,10 +27,11 @@ export {
   fetchHttpStream,
   stream,
   rpcStream,
+  type ConnectConnectionAdapter,
   type ConnectionAdapter,
   type FetchConnectionOptions,
+  type SubscribeConnectionAdapter,
 } from './connection-adapters'
-export { createDefaultSession, type SessionAdapter } from './session-adapter'
 
 // Re-export message converters from @tanstack/ai
 export {
