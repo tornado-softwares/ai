@@ -202,7 +202,9 @@ export function normalizeConnectionAdapter(
             timestamp: Date.now(),
             error: {
               message:
-                err instanceof Error ? err.message : 'Unknown error in connect()',
+                err instanceof Error
+                  ? err.message
+                  : 'Unknown error in connect()',
             },
           })
         }

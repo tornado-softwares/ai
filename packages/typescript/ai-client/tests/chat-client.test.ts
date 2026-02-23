@@ -156,7 +156,9 @@ describe('ChatClient', () => {
       const sendPromise = client.sendMessage('Hello')
       const completed = await Promise.race([
         sendPromise.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(false), 100),
+        ),
       ])
 
       expect(completed).toBe(false)
@@ -648,7 +650,9 @@ describe('ChatClient', () => {
 
       const completed = await Promise.race([
         sendPromise.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500)),
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(false), 500),
+        ),
       ])
 
       expect(completed).toBe(true)

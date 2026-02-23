@@ -105,7 +105,8 @@ export class ChatClient {
         },
         onStreamStart: () => {
           this.setStatus('streaming')
-          const assistantMessageId = this.processor.getCurrentAssistantMessageId()
+          const assistantMessageId =
+            this.processor.getCurrentAssistantMessageId()
           if (!assistantMessageId) {
             return
           }
@@ -283,7 +284,8 @@ export class ChatClient {
   }
 
   private reportStreamError(error: Error): void {
-    const alreadyReported = this.errorReportedGeneration === this.streamGeneration
+    const alreadyReported =
+      this.errorReportedGeneration === this.streamGeneration
     this.setError(error)
     this.setStatus('error')
     if (!alreadyReported) {
@@ -514,7 +516,11 @@ export class ChatClient {
       const processingComplete = this.waitForProcessing()
 
       // Send through normalized connection (pushes chunks to subscription queue)
-      await this.connection.send(messages, mergedBody, this.abortController.signal)
+      await this.connection.send(
+        messages,
+        mergedBody,
+        this.abortController.signal,
+      )
 
       // Wait for subscription loop to finish processing all chunks
       await processingComplete
