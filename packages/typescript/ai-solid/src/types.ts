@@ -1,6 +1,7 @@
 import type { AnyClientTool, ModelMessage } from '@tanstack/ai'
 import type {
   ChatClientOptions,
+  ConnectionStatus,
   ChatClientState,
   ChatRequestBody,
   MultimodalContent,
@@ -30,8 +31,16 @@ export type { ChatRequestBody, MultimodalContent, UIMessage }
 export type UseChatOptions<TTools extends ReadonlyArray<AnyClientTool> = any> =
   Omit<
     ChatClientOptions<TTools>,
-    'onMessagesChange' | 'onLoadingChange' | 'onErrorChange' | 'onStatusChange'
-  >
+    | 'onMessagesChange'
+    | 'onLoadingChange'
+    | 'onErrorChange'
+    | 'onStatusChange'
+    | 'onSubscriptionChange'
+    | 'onConnectionStatusChange'
+    | 'onSessionGeneratingChange'
+  > & {
+    live?: boolean
+  }
 
 export interface UseChatReturn<
   TTools extends ReadonlyArray<AnyClientTool> = any,
@@ -105,6 +114,24 @@ export interface UseChatReturn<
    * Current generation status
    */
   status: Accessor<ChatClientState>
+
+  /**
+   * Whether the subscription loop is currently active
+   */
+  isSubscribed: Accessor<boolean>
+
+  /**
+   * Current connection lifecycle status
+   */
+  connectionStatus: Accessor<ConnectionStatus>
+
+  /**
+   * Whether the shared session is actively generating.
+   * Derived from stream run events (RUN_STARTED / RUN_FINISHED / RUN_ERROR).
+   * Unlike `isLoading` (request-local), this reflects shared generation
+   * activity visible to all subscribers (e.g. across tabs/devices).
+   */
+  sessionGenerating: Accessor<boolean>
 }
 
 // Note: createChatClientOptions and InferChatMessages are now in @tanstack/ai-client
