@@ -1986,4 +1986,237 @@ describe('ChatClient', () => {
       expect(textPart?.content).toBe('All done!')
     })
   })
+
+  describe('concurrent runs and reconnect correctness', () => {
+    it('concurrent runs should not produce duplicate messages or corrupt content', async () => {
+      const wake = { fn: null as (() => void) | null }
+      const chunks: Array<StreamChunk> = []
+      const connection = {
+        subscribe: async function* (signal?: AbortSignal) {
+          while (!signal?.aborted) {
+            if (chunks.length > 0) {
+              const batch = chunks.splice(0)
+              for (const chunk of batch) {
+                yield chunk
+              }
+            }
+            await new Promise<void>((resolve) => {
+              wake.fn = resolve
+              const onAbort = () => resolve()
+              signal?.addEventListener('abort', onAbort, { once: true })
+            })
+          }
+        },
+        send: async () => {
+          wake.fn?.()
+        },
+      }
+
+      const messagesSnapshots: Array<Array<UIMessage>> = []
+      const client = new ChatClient({
+        connection,
+        onMessagesChange: (msgs) => {
+          messagesSnapshots.push(msgs.map((m) => ({ ...m })))
+        },
+      })
+
+      client.subscribe()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Run A starts with text message
+      chunks.push(
+        {
+          type: 'RUN_STARTED',
+          runId: 'run-a',
+          model: 'test',
+          timestamp: Date.now(),
+        },
+        {
+          type: 'TEXT_MESSAGE_START',
+          messageId: 'msg-a',
+          role: 'assistant',
+          model: 'test',
+          timestamp: Date.now(),
+        } as StreamChunk,
+        {
+          type: 'TEXT_MESSAGE_CONTENT',
+          messageId: 'msg-a',
+          model: 'test',
+          timestamp: Date.now(),
+          delta: 'Story: ',
+        } as StreamChunk,
+      )
+      wake.fn?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      // Run B starts concurrently
+      chunks.push(
+        {
+          type: 'RUN_STARTED',
+          runId: 'run-b',
+          model: 'test',
+          timestamp: Date.now(),
+        },
+        {
+          type: 'TEXT_MESSAGE_START',
+          messageId: 'msg-b',
+          role: 'assistant',
+          model: 'test',
+          timestamp: Date.now(),
+        } as StreamChunk,
+        {
+          type: 'TEXT_MESSAGE_CONTENT',
+          messageId: 'msg-b',
+          model: 'test',
+          timestamp: Date.now(),
+          delta: 'Hi!',
+        } as StreamChunk,
+      )
+      wake.fn?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      // Run B finishes — Run A should still be active
+      chunks.push({
+        type: 'RUN_FINISHED',
+        runId: 'run-b',
+        model: 'test',
+        timestamp: Date.now(),
+        finishReason: 'stop',
+      })
+      wake.fn?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      // Run A continues streaming
+      chunks.push({
+        type: 'TEXT_MESSAGE_CONTENT',
+        messageId: 'msg-a',
+        model: 'test',
+        timestamp: Date.now(),
+        delta: 'once upon a time',
+      } as StreamChunk)
+      wake.fn?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      // Verify msg-a still has correct content after run-b finished
+      const messages = client.getMessages()
+      const msgA = messages.find((m) => m.id === 'msg-a')
+      const msgB = messages.find((m) => m.id === 'msg-b')
+
+      expect(msgA).toBeDefined()
+      expect(msgB).toBeDefined()
+      expect(msgA!.parts[0]).toEqual({
+        type: 'text',
+        content: 'Story: once upon a time',
+      })
+      expect(msgB!.parts[0]).toEqual({ type: 'text', content: 'Hi!' })
+
+      // No duplicate messages
+      expect(messages.filter((m) => m.id === 'msg-a')).toHaveLength(1)
+      expect(messages.filter((m) => m.id === 'msg-b')).toHaveLength(1)
+
+      // Finish run A
+      chunks.push({
+        type: 'RUN_FINISHED',
+        runId: 'run-a',
+        model: 'test',
+        timestamp: Date.now(),
+        finishReason: 'stop',
+      })
+      wake.fn?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(client.getSessionGenerating()).toBe(false)
+      client.unsubscribe()
+    })
+
+    it('reconnect with initialMessages should not duplicate assistant message on content arrival', async () => {
+      const wake = { fn: null as (() => void) | null }
+      const chunks: Array<StreamChunk> = []
+      const connection = {
+        subscribe: async function* (signal?: AbortSignal) {
+          while (!signal?.aborted) {
+            if (chunks.length > 0) {
+              const batch = chunks.splice(0)
+              for (const chunk of batch) {
+                yield chunk
+              }
+            }
+            await new Promise<void>((resolve) => {
+              wake.fn = resolve
+              const onAbort = () => resolve()
+              signal?.addEventListener('abort', onAbort, { once: true })
+            })
+          }
+        },
+        send: async () => {
+          wake.fn?.()
+        },
+      }
+
+      // Simulate reconnect: client created with initialMessages (from SSR/snapshot)
+      const initialMessages: Array<UIMessage> = [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', content: 'Tell me a story' }],
+          createdAt: new Date(),
+        },
+        {
+          id: 'asst-1',
+          role: 'assistant',
+          parts: [{ type: 'text', content: 'Once upon a ' }],
+          createdAt: new Date(),
+        },
+      ]
+
+      const client = new ChatClient({
+        connection,
+        initialMessages,
+      })
+
+      client.subscribe()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Resumed content for in-progress message (no TEXT_MESSAGE_START)
+      chunks.push(
+        {
+          type: 'RUN_STARTED',
+          runId: 'run-1',
+          model: 'test',
+          timestamp: Date.now(),
+        },
+        {
+          type: 'TEXT_MESSAGE_CONTENT',
+          messageId: 'asst-1',
+          model: 'test',
+          timestamp: Date.now(),
+          delta: 'time...',
+        } as StreamChunk,
+        {
+          type: 'RUN_FINISHED',
+          runId: 'run-1',
+          model: 'test',
+          timestamp: Date.now(),
+          finishReason: 'stop',
+        },
+      )
+      wake.fn?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      const messages = client.getMessages()
+
+      // Should still have exactly 2 messages, not 3
+      expect(messages).toHaveLength(2)
+
+      // Content should be correctly appended
+      const asstMsg = messages.find((m) => m.id === 'asst-1')
+      expect(asstMsg).toBeDefined()
+      expect(asstMsg!.parts[0]).toEqual({
+        type: 'text',
+        content: 'Once upon a time...',
+      })
+
+      client.unsubscribe()
+    })
+  })
 })
