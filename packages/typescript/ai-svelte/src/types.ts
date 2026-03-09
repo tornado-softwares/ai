@@ -1,9 +1,9 @@
 import type { AnyClientTool, ModelMessage } from '@tanstack/ai'
 import type {
   ChatClientOptions,
-  ConnectionStatus,
   ChatClientState,
   ChatRequestBody,
+  ConnectionStatus,
   MultimodalContent,
   UIMessage,
 } from '@tanstack/ai-client'
@@ -35,9 +35,9 @@ export type CreateChatOptions<
   | 'onLoadingChange'
   | 'onErrorChange'
   | 'onStatusChange'
-    | 'onSubscriptionChange'
-    | 'onConnectionStatusChange'
-    | 'onSessionGeneratingChange'
+  | 'onSubscriptionChange'
+  | 'onConnectionStatusChange'
+  | 'onSessionGeneratingChange'
   > & {
   live?: boolean
 }
