@@ -1,5 +1,36 @@
 # @tanstack/ai-gemini
 
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [[`f62eeb0`](https://github.com/TanStack/ai/commit/f62eeb0d7efd002894435c7f2c8a9f2790f0b6d7)]:
+  - @tanstack/ai@0.8.0
+
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`86be1c8`](https://github.com/TanStack/ai/commit/86be1c8262bb3176ea786aa0af115b38c3e3f51a)]:
+  - @tanstack/ai@0.7.0
+
+## 0.8.0
+
+### Minor Changes
+
+- feat: add support for Gemini 3.1 Flash Lite Preview model ([#351](https://github.com/TanStack/ai/pull/351))
+
+  Added `gemini-3.1-flash-lite-preview` to the Gemini adapter with:
+  - Full multimodal support (text, image, audio, video, document)
+  - Thinking and structured output capabilities
+  - Available for summarization tasks
+  - Comprehensive type tests
+
+  Model specs:
+  - 1M input tokens, 65K output tokens
+  - $0.25/1M input, $1.50/1M output pricing
+  - Knowledge cutoff: 2025-01-01
+
 ## 0.7.0
 
 ### Minor Changes

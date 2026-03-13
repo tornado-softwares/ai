@@ -1,5 +1,34 @@
 # @tanstack/ai-svelte
 
+## 0.6.6
+
+### Patch Changes
+
+- Updated dependencies [[`f62eeb0`](https://github.com/TanStack/ai/commit/f62eeb0d7efd002894435c7f2c8a9f2790f0b6d7)]:
+  - @tanstack/ai@0.8.0
+  - @tanstack/ai-client@0.7.1
+
+## 0.6.5
+
+### Patch Changes
+
+- Updated dependencies [[`86be1c8`](https://github.com/TanStack/ai/commit/86be1c8262bb3176ea786aa0af115b38c3e3f51a)]:
+  - @tanstack/ai@0.7.0
+  - @tanstack/ai-client@0.7.0
+
+## 0.6.4
+
+### Patch Changes
+
+- feat: pass abort signal to generation fetchers and extract GenerationFetcher utility type ([#327](https://github.com/TanStack/ai/pull/327))
+  - Generation clients now forward an `AbortSignal` to fetcher functions via an optional `options` parameter, enabling cancellation support when `stop()` is called
+  - Introduced `GenerationFetcher<TInput, TResult>` utility type in `@tanstack/ai-client` to centralize the fetcher function signature across all framework integrations
+  - All framework hooks/composables (React, Solid, Vue, Svelte) now use the shared `GenerationFetcher` type instead of inline definitions
+
+- Updated dependencies [[`6dfffca`](https://github.com/TanStack/ai/commit/6dfffca99aeac1ada59eb288f8eb09e564d3db1e), [`6dfffca`](https://github.com/TanStack/ai/commit/6dfffca99aeac1ada59eb288f8eb09e564d3db1e)]:
+  - @tanstack/ai@0.6.3
+  - @tanstack/ai-client@0.6.0
+
 ## 0.6.3
 
 ### Patch Changes
