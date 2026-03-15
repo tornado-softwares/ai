@@ -186,8 +186,8 @@ function ToolsTestPage() {
       )
       const pendingCalls = allToolCalls.filter(
         (tc) =>
-          tc.state !== 'complete' &&
-          tc.state !== 'output-available' &&
+          tc.state !== 'input-complete' &&
+          tc.state !== 'approval-responded' &&
           tc.output === undefined &&
           !resultIds.has(tc.id),
       )
@@ -509,9 +509,10 @@ function ToolsTestPage() {
                         padding: '2px 6px',
                         borderRadius: '3px',
                         backgroundColor:
-                          tc.state === 'complete'
+                          tc.state === 'input-complete' ||
+                          tc.state === 'approval-responded'
                             ? '#28a745'
-                            : tc.state === 'streaming-arguments'
+                            : tc.state === 'input-streaming'
                               ? '#ffc107'
                               : tc.state === 'approval-requested'
                                 ? '#17a2b8'
@@ -572,8 +573,8 @@ function ToolsTestPage() {
         data-complete-tool-count={
           toolCalls.filter(
             (tc) =>
-              tc.state === 'complete' ||
-              tc.state === 'output-available' ||
+              tc.state === 'input-complete' ||
+              tc.state === 'approval-responded' ||
               tc.output !== undefined ||
               toolResultIds.has(tc.id),
           ).length
