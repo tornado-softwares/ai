@@ -75,4 +75,32 @@ describe('defineModelMeta', () => {
       })
     ).toThrow('input')
   })
+
+  it('should throw for empty output modalities', () => {
+    expect(() =>
+      defineModelMeta({
+        name: 'test',
+        supports: {
+          input: ['text'] as Array<Modality>,
+          output: [] as Array<Modality>,
+        },
+      })
+    ).toThrow('output')
+  })
+
+  it('should throw for negative output pricing', () => {
+    expect(() =>
+      defineModelMeta({
+        name: 'test',
+        supports: {
+          input: ['text'] as Array<Modality>,
+          output: ['text'] as Array<Modality>,
+        },
+        pricing: {
+          input: { normal: 1 },
+          output: { normal: -1 },
+        },
+      })
+    ).toThrow('pricing')
+  })
 })

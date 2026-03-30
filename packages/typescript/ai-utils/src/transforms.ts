@@ -1,3 +1,9 @@
+/**
+ * Recursively converts null values to undefined in an object.
+ * Used after receiving structured output from OpenAI-compatible providers,
+ * which return null for optional fields that were made nullable in the
+ * JSON Schema strict mode transformation.
+ */
 export function transformNullsToUndefined<T>(obj: T): T {
   if (obj === null) {
     return undefined as unknown as T
