@@ -751,9 +751,7 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
         {
           id: 'chatcmpl-123',
           model: 'test-model',
-          choices: [
-            { delta: { content: 'Hi' }, finish_reason: null },
-          ],
+          choices: [{ delta: { content: 'Hi' }, finish_reason: null }],
         },
         {
           id: 'chatcmpl-123',
@@ -793,9 +791,7 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
         {
           id: 'chatcmpl-123',
           model: 'test-model',
-          choices: [
-            { delta: { content: 'Hi' }, finish_reason: null },
-          ],
+          choices: [{ delta: { content: 'Hi' }, finish_reason: null }],
         },
         {
           id: 'chatcmpl-123',
@@ -831,9 +827,7 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
 
     it('does not include stream_options in structured output calls', async () => {
       const nonStreamResponse = {
-        choices: [
-          { message: { content: '{"name":"Alice"}' } },
-        ],
+        choices: [{ message: { content: '{"name":"Alice"}' } }],
       }
 
       setupMockSdkClient([], nonStreamResponse)
@@ -866,9 +860,7 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
         {
           id: 'chatcmpl-123',
           model: 'test-model',
-          choices: [
-            { delta: { content: 'Hi' }, finish_reason: null },
-          ],
+          choices: [{ delta: { content: 'Hi' }, finish_reason: null }],
         },
         {
           id: 'chatcmpl-123',
@@ -900,7 +892,9 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
       // Verify second argument contains headers and signal
       const requestOptions = mockCreate.mock.calls[0]?.[1]
       expect(requestOptions).toBeDefined()
-      expect(requestOptions.headers).toEqual({ 'X-Custom-Header': 'test-value' })
+      expect(requestOptions.headers).toEqual({
+        'X-Custom-Header': 'test-value',
+      })
       expect(requestOptions.signal).toBe(controller.signal)
     })
   })
