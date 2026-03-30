@@ -10,3 +10,9 @@ export {
   convertToolsToChatCompletionsFormat,
   type ChatCompletionFunctionTool,
 } from './adapters/chat-completions-tool-converter'
+export { OpenAICompatibleResponsesTextAdapter } from './adapters/responses-text'
+export {
+  convertFunctionToolToResponsesFormat,
+  convertToolsToResponsesFormat,
+  type ResponsesFunctionTool,
+} from './adapters/responses-tool-converter'
