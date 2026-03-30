@@ -19,8 +19,8 @@ export function convertMCPToolToAdapterFormat(tool: Tool): MCPTool {
   const metadata = tool.metadata as Omit<MCPTool, 'type'>
 
   const mcpTool: MCPTool = {
-    type: 'mcp',
     ...metadata,
+    type: 'mcp',
   }
 
   validateMCPtool(mcpTool)

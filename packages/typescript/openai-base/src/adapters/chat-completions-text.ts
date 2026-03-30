@@ -73,10 +73,19 @@ export class OpenAICompatibleChatCompletionsTextAdapter<
     }
 
     try {
-      const stream = await this.client.chat.completions.create({
-        ...requestParams,
-        stream: true,
-      })
+      const stream = await this.client.chat.completions.create(
+        {
+          ...requestParams,
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+        {
+          headers: (options.request as RequestInit | undefined)?.headers as
+            | Record<string, string>
+            | undefined,
+          signal: (options.request as RequestInit | undefined)?.signal,
+        },
+      )
 
       yield* this.processStreamChunks(stream, options, aguiState)
     } catch (error: unknown) {
@@ -138,18 +147,32 @@ export class OpenAICompatibleChatCompletionsTextAdapter<
     )
 
     try {
-      const response = await this.client.chat.completions.create({
-        ...requestParams,
-        stream: false,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'structured_output',
-            schema: jsonSchema,
-            strict: true,
+      // Strip stream_options which is only valid for streaming calls
+      const {
+        stream_options: _,
+        stream: __,
+        ...cleanParams
+      } = requestParams as any
+      const response = await this.client.chat.completions.create(
+        {
+          ...cleanParams,
+          stream: false,
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'structured_output',
+              schema: jsonSchema,
+              strict: true,
+            },
           },
         },
-      })
+        {
+          headers: (chatOptions.request as RequestInit | undefined)?.headers as
+            | Record<string, string>
+            | undefined,
+          signal: (chatOptions.request as RequestInit | undefined)?.signal,
+        },
+      )
 
       // Extract text content from the response
       const rawText = response.choices[0]?.message.content || ''
@@ -436,15 +459,19 @@ export class OpenAICompatibleChatCompletionsTextAdapter<
       messages.push(this.convertMessage(message))
     }
 
+    const modelOptions = options.modelOptions as
+      | Record<string, any>
+      | undefined
+
     return {
       model: options.model,
       messages,
       temperature: options.temperature,
       max_tokens: options.maxTokens,
       top_p: options.topP,
+      ...modelOptions,
       tools: tools as Array<OpenAI_SDK.Chat.Completions.ChatCompletionTool>,
       stream: true,
-      stream_options: { include_usage: true },
     }
   }
 

@@ -36,6 +36,28 @@ function removeEmptyRequired(schema: Record<string, any>): Record<string, any> {
     result.items = removeEmptyRequired(result.items)
   }
 
+  // Recurse into combinator arrays (anyOf, oneOf, allOf)
+  for (const keyword of ['anyOf', 'oneOf', 'allOf'] as const) {
+    if (Array.isArray(result[keyword])) {
+      result[keyword] = result[keyword].map((entry: Record<string, any>) =>
+        typeof entry === 'object' && entry !== null
+          ? removeEmptyRequired(entry)
+          : entry,
+      )
+    }
+  }
+
+  // Recurse into additionalProperties if it's a schema object
+  if (
+    result.additionalProperties &&
+    typeof result.additionalProperties === 'object' &&
+    !Array.isArray(result.additionalProperties)
+  ) {
+    result.additionalProperties = removeEmptyRequired(
+      result.additionalProperties,
+    )
+  }
+
   return result
 }
 

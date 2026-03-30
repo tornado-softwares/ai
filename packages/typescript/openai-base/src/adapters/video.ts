@@ -128,7 +128,20 @@ export class OpenAICompatibleVideoAdapter<
 
       let response: any
 
-      if (typeof client.videos?.content === 'function') {
+      if (typeof client.videos?.downloadContent === 'function') {
+        // OpenAI SDK's downloadContent returns raw video bytes as a Response
+        const contentResponse = await client.videos.downloadContent(jobId)
+        const videoBlob = await contentResponse.blob()
+        const buffer = await videoBlob.arrayBuffer()
+        const base64 = Buffer.from(buffer).toString('base64')
+        const mimeType =
+          contentResponse.headers.get('content-type') || 'video/mp4'
+        return {
+          jobId,
+          url: `data:${mimeType};base64,${base64}`,
+          expiresAt: undefined,
+        }
+      } else if (typeof client.videos?.content === 'function') {
         response = await client.videos.content(jobId)
       } else if (typeof client.videos?.getContent === 'function') {
         response = await client.videos.getContent(jobId)
@@ -142,7 +155,7 @@ export class OpenAICompatibleVideoAdapter<
             jobId,
             url: videoInfo.url,
             expiresAt: videoInfo.expires_at
-              ? new Date(videoInfo.expires_at)
+              ? new Date(videoInfo.expires_at * 1000)
               : undefined,
           }
         }
@@ -192,7 +205,7 @@ export class OpenAICompatibleVideoAdapter<
         jobId,
         url: response.url,
         expiresAt: response.expires_at
-          ? new Date(response.expires_at)
+          ? new Date(response.expires_at * 1000)
           : undefined,
       }
     } catch (error: any) {

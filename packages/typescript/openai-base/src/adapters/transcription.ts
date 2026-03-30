@@ -61,7 +61,7 @@ export class OpenAICompatibleTranscriptionAdapter<
     // Call API - use verbose_json to get timestamps when available
     const useVerbose =
       responseFormat === 'verbose_json' ||
-      (!responseFormat && model !== 'whisper-1')
+      (!responseFormat && this.shouldDefaultToVerbose(model))
 
     if (useVerbose) {
       const response = await this.client.audio.transcriptions.create({
@@ -116,7 +116,7 @@ export class OpenAICompatibleTranscriptionAdapter<
     }
 
     // If ArrayBuffer, convert to File
-    if (audio instanceof ArrayBuffer) {
+    if (typeof ArrayBuffer !== 'undefined' && audio instanceof ArrayBuffer) {
       return new File([audio], 'audio.mp3', { type: 'audio/mpeg' })
     }
 
@@ -129,6 +129,11 @@ export class OpenAICompatibleTranscriptionAdapter<
         const base64Data = parts[1] || ''
         const mimeMatch = header?.match(/data:([^;]+)/)
         const mimeType = mimeMatch?.[1] || 'audio/mpeg'
+        if (typeof atob !== 'function') {
+          throw new Error(
+            'atob is not available in this environment. Use a File, Blob, or ArrayBuffer input instead.',
+          )
+        }
         const binaryStr = atob(base64Data)
         const bytes = new Uint8Array(binaryStr.length)
         for (let i = 0; i < binaryStr.length; i++) {
@@ -139,6 +144,11 @@ export class OpenAICompatibleTranscriptionAdapter<
       }
 
       // Assume raw base64
+      if (typeof atob !== 'function') {
+        throw new Error(
+          'atob is not available in this environment. Use a File, Blob, or ArrayBuffer input instead.',
+        )
+      }
       const binaryStr = atob(audio)
       const bytes = new Uint8Array(binaryStr.length)
       for (let i = 0; i < binaryStr.length; i++) {
@@ -148,6 +158,14 @@ export class OpenAICompatibleTranscriptionAdapter<
     }
 
     throw new Error('Invalid audio input type')
+  }
+
+  /**
+   * Whether the adapter should default to verbose_json when no response format is specified.
+   * Override in provider-specific subclasses for model-specific behavior.
+   */
+  protected shouldDefaultToVerbose(_model: string): boolean {
+    return false
   }
 
   protected mapResponseFormat(

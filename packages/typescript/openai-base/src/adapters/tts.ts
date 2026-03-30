@@ -62,7 +62,7 @@ export class OpenAICompatibleTTSAdapter<
     const arrayBuffer = await response.arrayBuffer()
     const base64 = Buffer.from(arrayBuffer).toString('base64')
 
-    const outputFormat = format || 'mp3'
+    const outputFormat = (request.response_format as string) || 'mp3'
     const contentType = this.getContentType(outputFormat)
 
     return {

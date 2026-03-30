@@ -784,6 +784,99 @@ describe('OpenAICompatibleResponsesTextAdapter', () => {
         expect(toolEnds[1].input).toEqual({ location: 'Paris' })
       }
     })
+
+    it('uses call_id instead of internal id for tool call correlation', async () => {
+      const streamChunks = [
+        {
+          type: 'response.created',
+          response: {
+            id: 'resp-callid',
+            model: 'test-model',
+            status: 'in_progress',
+          },
+        },
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: {
+            type: 'function_call',
+            id: 'fc_internal_001',
+            call_id: 'call_api_abc123',
+            name: 'lookup_weather',
+          },
+        },
+        {
+          type: 'response.function_call_arguments.delta',
+          item_id: 'fc_internal_001',
+          delta: '{"location":"Tokyo"}',
+        },
+        {
+          type: 'response.function_call_arguments.done',
+          item_id: 'fc_internal_001',
+          arguments: '{"location":"Tokyo"}',
+        },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-callid',
+            model: 'test-model',
+            status: 'completed',
+            output: [
+              {
+                type: 'function_call',
+                id: 'fc_internal_001',
+                call_id: 'call_api_abc123',
+                name: 'lookup_weather',
+                arguments: '{"location":"Tokyo"}',
+              },
+            ],
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              total_tokens: 15,
+            },
+          },
+        },
+      ]
+
+      setupMockResponsesClient(streamChunks)
+      const adapter = new OpenAICompatibleResponsesTextAdapter(
+        testConfig,
+        'test-model',
+      )
+      const chunks: Array<StreamChunk> = []
+
+      for await (const chunk of adapter.chatStream({
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'Weather in Tokyo?' }],
+        tools: [weatherTool],
+      })) {
+        chunks.push(chunk)
+      }
+
+      // TOOL_CALL_START should use call_id, not internal id
+      const toolStart = chunks.find((c) => c.type === 'TOOL_CALL_START')
+      expect(toolStart).toBeDefined()
+      if (toolStart?.type === 'TOOL_CALL_START') {
+        expect(toolStart.toolCallId).toBe('call_api_abc123')
+        expect(toolStart.toolCallId).not.toBe('fc_internal_001')
+      }
+
+      // TOOL_CALL_ARGS should also use call_id
+      const toolArgs = chunks.filter((c) => c.type === 'TOOL_CALL_ARGS')
+      expect(toolArgs.length).toBeGreaterThan(0)
+      if (toolArgs[0]?.type === 'TOOL_CALL_ARGS') {
+        expect(toolArgs[0].toolCallId).toBe('call_api_abc123')
+      }
+
+      // TOOL_CALL_END should also use call_id
+      const toolEnd = chunks.find((c) => c.type === 'TOOL_CALL_END')
+      expect(toolEnd).toBeDefined()
+      if (toolEnd?.type === 'TOOL_CALL_END') {
+        expect(toolEnd.toolCallId).toBe('call_api_abc123')
+        expect(toolEnd.toolCallId).not.toBe('fc_internal_001')
+      }
+    })
   })
 
   describe('content_part events', () => {

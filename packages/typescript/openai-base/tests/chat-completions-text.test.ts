@@ -640,7 +640,7 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
       expect(result.data).toEqual({ name: 'Alice', age: 30 })
       expect(result.rawText).toBe('{"name":"Alice","age":30}')
 
-      // Verify stream: false was passed
+      // Verify stream: false was passed (second arg is request options)
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           stream: false,
@@ -648,6 +648,7 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
             type: 'json_schema',
           }),
         }),
+        expect.anything(),
       )
     })
 
@@ -741,6 +742,166 @@ describe('OpenAICompatibleChatCompletionsTextAdapter', () => {
       expect(adapter.name).toBe('my-provider')
       expect(adapter.kind).toBe('text')
       expect(adapter.model).toBe('my-model')
+    })
+  })
+
+  describe('request forwarding', () => {
+    it('forwards modelOptions to the API request', async () => {
+      const streamChunks = [
+        {
+          id: 'chatcmpl-123',
+          model: 'test-model',
+          choices: [
+            { delta: { content: 'Hi' }, finish_reason: null },
+          ],
+        },
+        {
+          id: 'chatcmpl-123',
+          model: 'test-model',
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+        },
+      ]
+
+      setupMockSdkClient(streamChunks)
+      const adapter = new OpenAICompatibleChatCompletionsTextAdapter(
+        testConfig,
+        'test-model',
+      )
+
+      const chunks: Array<StreamChunk> = []
+      for await (const chunk of adapter.chatStream({
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'Hello' }],
+        modelOptions: { frequency_penalty: 0.5, presence_penalty: 0.3 },
+      })) {
+        chunks.push(chunk)
+      }
+
+      // Verify modelOptions were forwarded
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          frequency_penalty: 0.5,
+          presence_penalty: 0.3,
+        }),
+        expect.anything(),
+      )
+    })
+
+    it('includes stream_options only for streaming calls', async () => {
+      const streamChunks = [
+        {
+          id: 'chatcmpl-123',
+          model: 'test-model',
+          choices: [
+            { delta: { content: 'Hi' }, finish_reason: null },
+          ],
+        },
+        {
+          id: 'chatcmpl-123',
+          model: 'test-model',
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+        },
+      ]
+
+      setupMockSdkClient(streamChunks)
+      const adapter = new OpenAICompatibleChatCompletionsTextAdapter(
+        testConfig,
+        'test-model',
+      )
+
+      const chunks: Array<StreamChunk> = []
+      for await (const chunk of adapter.chatStream({
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'Hello' }],
+      })) {
+        chunks.push(chunk)
+      }
+
+      // Streaming call should include stream_options
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+        expect.anything(),
+      )
+    })
+
+    it('does not include stream_options in structured output calls', async () => {
+      const nonStreamResponse = {
+        choices: [
+          { message: { content: '{"name":"Alice"}' } },
+        ],
+      }
+
+      setupMockSdkClient([], nonStreamResponse)
+
+      const adapter = new OpenAICompatibleChatCompletionsTextAdapter(
+        testConfig,
+        'test-model',
+      )
+
+      await adapter.structuredOutput({
+        chatOptions: {
+          model: 'test-model',
+          messages: [{ role: 'user', content: 'Give me a person' }],
+        },
+        outputSchema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+      })
+
+      // Structured output call should NOT have stream_options
+      const callArgs = mockCreate.mock.calls[0]?.[0]
+      expect(callArgs.stream).toBe(false)
+      expect(callArgs.stream_options).toBeUndefined()
+    })
+
+    it('forwards request headers and signal to SDK create calls', async () => {
+      const streamChunks = [
+        {
+          id: 'chatcmpl-123',
+          model: 'test-model',
+          choices: [
+            { delta: { content: 'Hi' }, finish_reason: null },
+          ],
+        },
+        {
+          id: 'chatcmpl-123',
+          model: 'test-model',
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+        },
+      ]
+
+      setupMockSdkClient(streamChunks)
+      const adapter = new OpenAICompatibleChatCompletionsTextAdapter(
+        testConfig,
+        'test-model',
+      )
+
+      const controller = new AbortController()
+      const chunks: Array<StreamChunk> = []
+      for await (const chunk of adapter.chatStream({
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'Hello' }],
+        request: {
+          headers: { 'X-Custom-Header': 'test-value' },
+          signal: controller.signal,
+        },
+      })) {
+        chunks.push(chunk)
+      }
+
+      // Verify second argument contains headers and signal
+      const requestOptions = mockCreate.mock.calls[0]?.[1]
+      expect(requestOptions).toBeDefined()
+      expect(requestOptions.headers).toEqual({ 'X-Custom-Header': 'test-value' })
+      expect(requestOptions.signal).toBe(controller.signal)
     })
   })
 })

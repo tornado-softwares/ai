@@ -33,6 +33,10 @@ export class OpenAITranscriptionAdapter<
   constructor(config: OpenAITranscriptionConfig, model: TModel) {
     super(toCompatibleConfig(config), model, 'openai')
   }
+
+  protected override shouldDefaultToVerbose(model: string): boolean {
+    return model !== 'whisper-1'
+  }
 }
 
 /**

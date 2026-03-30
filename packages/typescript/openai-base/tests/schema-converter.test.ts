@@ -158,4 +158,91 @@ describe('makeStructuredOutputCompatible', () => {
       'oneOf is not supported in OpenAI structured output schemas',
     )
   })
+
+  it('should use schema.required as default when originalRequired is not provided', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        nickname: { type: 'string' },
+      },
+      required: ['name'],
+    }
+
+    // Call without second argument — should use schema.required
+    const result = makeStructuredOutputCompatible(schema)
+    expect(result.properties.name.type).toBe('string')
+    expect(result.properties.nickname.type).toEqual(['string', 'null'])
+    expect(result.required).toEqual(['name', 'nickname'])
+  })
+
+  it('should make optional object properties nullable after recursion', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        required_obj: {
+          type: 'object',
+          properties: { x: { type: 'string' } },
+          required: ['x'],
+        },
+        optional_obj: {
+          type: 'object',
+          properties: { y: { type: 'number' } },
+          required: ['y'],
+        },
+      },
+      required: ['required_obj'],
+    }
+
+    const result = makeStructuredOutputCompatible(schema, ['required_obj'])
+
+    // required_obj should be recursed into but NOT made nullable
+    expect(result.properties.required_obj.additionalProperties).toBe(false)
+    expect(result.properties.required_obj.type).toBe('object')
+
+    // optional_obj should be recursed into AND made nullable
+    expect(result.properties.optional_obj.additionalProperties).toBe(false)
+    expect(result.properties.optional_obj.type).toEqual(['object', 'null'])
+  })
+
+  it('should make optional array properties nullable after recursion', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        tags: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { label: { type: 'string' } },
+            required: ['label'],
+          },
+        },
+      },
+      required: [],
+    }
+
+    const result = makeStructuredOutputCompatible(schema, [])
+
+    // tags is optional, should be nullable AND have items recursed
+    expect(result.properties.tags.type).toEqual(['array', 'null'])
+    expect(result.properties.tags.items.additionalProperties).toBe(false)
+  })
+
+  it('should make optional anyOf properties nullable by adding null variant', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        value: {
+          anyOf: [{ type: 'string' }, { type: 'number' }],
+        },
+      },
+      required: [],
+    }
+
+    const result = makeStructuredOutputCompatible(schema, [])
+
+    // optional anyOf should have a null variant added
+    expect(result.properties.value.anyOf).toContainEqual({ type: 'null' })
+    expect(result.properties.value.anyOf).toHaveLength(3)
+  })
 })

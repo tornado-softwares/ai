@@ -11,25 +11,26 @@
  */
 export function makeStructuredOutputCompatible(
   schema: Record<string, any>,
-  originalRequired: Array<string> = [],
+  originalRequired?: Array<string>,
 ): Record<string, any> {
   const result = { ...schema }
+  const required =
+    originalRequired ??
+    (Array.isArray(result.required) ? result.required : [])
 
   if (result.type === 'object' && result.properties) {
     const properties = { ...result.properties }
     const allPropertyNames = Object.keys(properties)
 
     for (const propName of allPropertyNames) {
-      const prop = properties[propName]
-      const wasOptional = !originalRequired.includes(propName)
+      let prop = properties[propName]
+      const wasOptional = !required.includes(propName)
 
+      // Step 1: Recurse into nested structures
       if (prop.type === 'object' && prop.properties) {
-        properties[propName] = makeStructuredOutputCompatible(
-          prop,
-          prop.required || [],
-        )
+        prop = makeStructuredOutputCompatible(prop, prop.required || [])
       } else if (prop.type === 'array' && prop.items) {
-        properties[propName] = {
+        prop = {
           ...prop,
           items: makeStructuredOutputCompatible(
             prop.items,
@@ -37,28 +38,28 @@ export function makeStructuredOutputCompatible(
           ),
         }
       } else if (prop.anyOf) {
-        properties[propName] = makeStructuredOutputCompatible(
-          prop,
-          prop.required || [],
-        )
+        prop = makeStructuredOutputCompatible(prop, prop.required || [])
       } else if (prop.oneOf) {
         throw new Error(
           'oneOf is not supported in OpenAI structured output schemas. Check the supported outputs here: https://platform.openai.com/docs/guides/structured-outputs#supported-types',
         )
-      } else if (wasOptional) {
-        // Optional fields must be nullable because OpenAI requires all properties in `required`
-        if (prop.type && !Array.isArray(prop.type)) {
-          properties[propName] = {
-            ...prop,
-            type: [prop.type, 'null'],
+      }
+
+      // Step 2: Apply null-widening for optional properties (after recursion)
+      if (wasOptional) {
+        if (prop.anyOf) {
+          // For anyOf, add a null variant if not already present
+          if (!prop.anyOf.some((v: any) => v.type === 'null')) {
+            prop = { ...prop, anyOf: [...prop.anyOf, { type: 'null' }] }
           }
+        } else if (prop.type && !Array.isArray(prop.type)) {
+          prop = { ...prop, type: [prop.type, 'null'] }
         } else if (Array.isArray(prop.type) && !prop.type.includes('null')) {
-          properties[propName] = {
-            ...prop,
-            type: [...prop.type, 'null'],
-          }
+          prop = { ...prop, type: [...prop.type, 'null'] }
         }
       }
+
+      properties[propName] = prop
     }
 
     result.properties = properties
