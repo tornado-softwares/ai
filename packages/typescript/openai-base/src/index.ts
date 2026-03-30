@@ -16,3 +16,11 @@ export {
   convertToolsToResponsesFormat,
   type ResponsesFunctionTool,
 } from './adapters/responses-tool-converter'
+export { OpenAICompatibleImageAdapter } from './adapters/image'
+export {
+  OpenAICompatibleSummarizeAdapter,
+  type ChatStreamCapable,
+} from './adapters/summarize'
+export { OpenAICompatibleTranscriptionAdapter } from './adapters/transcription'
+export { OpenAICompatibleTTSAdapter } from './adapters/tts'
+export { OpenAICompatibleVideoAdapter } from './adapters/video'
