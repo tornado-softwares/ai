@@ -1,5 +1,4 @@
-import OpenAI_SDK from 'openai'
-import { generateId as _generateId, getApiKeyFromEnv } from '@tanstack/ai-utils'
+import { getApiKeyFromEnv } from '@tanstack/ai-utils'
 import type { OpenAICompatibleClientConfig } from '@tanstack/openai-base'
 import type { ClientOptions } from 'openai'
 
@@ -8,25 +7,11 @@ export interface OpenAIClientConfig extends ClientOptions {
 }
 
 /**
- * Creates an OpenAI SDK client instance
- */
-export function createOpenAIClient(config: OpenAIClientConfig): OpenAI_SDK {
-  return new OpenAI_SDK(config)
-}
-
-/**
  * Gets OpenAI API key from environment variables
  * @throws Error if OPENAI_API_KEY is not found
  */
 export function getOpenAIApiKeyFromEnv(): string {
   return getApiKeyFromEnv('OPENAI_API_KEY')
-}
-
-/**
- * Generates a unique ID with a prefix
- */
-export function generateId(prefix: string): string {
-  return _generateId(prefix)
 }
 
 /**

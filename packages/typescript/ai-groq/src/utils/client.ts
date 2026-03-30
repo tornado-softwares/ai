@@ -1,6 +1,6 @@
+import { generateId as _generateId, getApiKeyFromEnv } from '@tanstack/ai-utils'
 import Groq_SDK from 'groq-sdk'
 import type { ClientOptions } from 'groq-sdk'
-import { generateId as _generateId, getApiKeyFromEnv } from '@tanstack/ai-utils'
 
 export interface GroqClientConfig extends ClientOptions {
   apiKey: string

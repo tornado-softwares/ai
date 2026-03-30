@@ -459,9 +459,7 @@ export class OpenAICompatibleChatCompletionsTextAdapter<
       messages.push(this.convertMessage(message))
     }
 
-    const modelOptions = options.modelOptions as
-      | Record<string, any>
-      | undefined
+    const modelOptions = options.modelOptions
 
     return {
       model: options.model,

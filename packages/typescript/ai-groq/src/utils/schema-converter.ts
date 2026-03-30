@@ -40,9 +40,7 @@ function removeEmptyRequired(schema: Record<string, any>): Record<string, any> {
   for (const keyword of ['anyOf', 'oneOf', 'allOf'] as const) {
     if (Array.isArray(result[keyword])) {
       result[keyword] = result[keyword].map((entry: Record<string, any>) =>
-        typeof entry === 'object' && entry !== null
-          ? removeEmptyRequired(entry)
-          : entry,
+        removeEmptyRequired(entry),
       )
     }
   }
