@@ -41,7 +41,8 @@
     "test:types": "tsc"
   },
   "dependencies": {
-    "@11labs/client": "^0.2.0"
+    "@11labs/client": "^0.2.0",
+    "@tanstack/ai-utils": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/ai": "workspace:^",
@@ -50,6 +51,7 @@
   "devDependencies": {
     "@tanstack/ai": "workspace:*",
     "@tanstack/ai-client": "workspace:*",
+    "@tanstack/ai-utils": "workspace:*",
     "@vitest/coverage-v8": "4.0.14"
   }
 }

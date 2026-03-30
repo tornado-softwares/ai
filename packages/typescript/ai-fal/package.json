@@ -41,10 +41,12 @@
     "video-generation"
   ],
   "dependencies": {
-    "@fal-ai/client": "^1.9.4"
+    "@fal-ai/client": "^1.9.4",
+    "@tanstack/ai-utils": "workspace:*"
   },
   "devDependencies": {
     "@tanstack/ai": "workspace:*",
+    "@tanstack/ai-utils": "workspace:*",
     "@vitest/coverage-v8": "4.0.14",
     "vite": "^7.2.7"
   },
