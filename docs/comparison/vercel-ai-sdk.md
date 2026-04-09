@@ -161,6 +161,9 @@ When your application has dozens of tools, sending all their schemas to the LLM 
 Mark tools as `lazy: true` and they won't be sent to the LLM initially. Instead, a synthetic discovery tool is injected that lets the LLM request tool schemas on demand:
 
 ```ts
+import { toolDefinition } from '@tanstack/ai'
+import { z } from 'zod'
+
 const searchProducts = toolDefinition({
   name: 'searchProducts',
   description: 'Search the product catalog',
@@ -181,7 +184,7 @@ Vercel AI SDK has no equivalent — all tools must be sent upfront.
 - `@tanstack/ai-react` — `useChat` hook wraps `ChatClient`
 - `@tanstack/ai-solid` — `useChat` hook wraps `ChatClient`
 - `@tanstack/ai-vue` — `useChat` composable wraps `ChatClient`
-- `@tanstack/ai-svelte` — Svelte store wraps `ChatClient`
+- `@tanstack/ai-svelte` — `createChat` wraps `ChatClient` (Svelte 5 runes)
 - `@tanstack/ai-preact` — `useChat` hook wraps `ChatClient`
 
 No framework-specific logic in the core. If a new framework emerges, it only needs a thin reactive wrapper.
@@ -207,7 +210,7 @@ fetchServerSentEvents('/api/chat')
 fetchHttpStream('/api/chat')
 
 // Direct async iterables (TanStack Start server functions)
-stream(() => chatOnServer({ messages }))
+stream((messages) => chatOnServer({ messages }))
 
 // RPC-based transport
 rpcStream((messages, data) => api.streamResponse(messages, data))
@@ -297,6 +300,7 @@ TanStack AI publishes an open adapter specification. The community has already b
 
 ```ts
 import { toolDefinition } from '@tanstack/ai'
+import { z } from 'zod'
 
 const getWeather = toolDefinition({
   name: 'getWeather',
