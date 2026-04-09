@@ -18,12 +18,12 @@ This article compares the two SDKs from TanStack AI's perspective, with honest a
 |---------|------------|---------------|
 | License | MIT | Apache 2.0 |
 | Hosting | Works anywhere | Works anywhere |
-| Providers | 9 official + 5 community + OpenRouter | 40+ via Gateway or direct |
+| Providers | 9 official (including OpenRouter) + 5 community | 40+ via Gateway or direct |
 | Framework Hooks | React, Solid, Svelte, Vue, Preact | React, Svelte, Vue, Angular |
 | Headless UI Components | React, Solid, Vue | — |
 | Streaming | Built-in with configurable chunk strategies | Built-in with progressive delivery |
 | Tool Calling | Isomorphic `.server()` / `.client()` system | Provider-scoped tool objects |
-| Agent Loop Control | Composable strategy functions | Fixed `ToolLoopAgent` class |
+| Agent Loop Control | Composable strategy functions | `maxSteps` parameter |
 | Tool Approval | Per-tool `needsApproval` with batched approval flow | Per-tool approval |
 | Type Safety | Per-model type narrowing | Per-provider types |
 | Schema Validation | Standard Schema v1 (Zod, ArkType, Valibot, any compliant library) | Zod + Standard Schema |
@@ -78,7 +78,7 @@ import { chat, generateImage } from '@tanstack/ai'
 import { openaiText, openaiImage } from '@tanstack/ai-openai'
 ```
 
-This is architectural, not incidental. Each adapter implements a specific interface (`ChatAdapter`, `ImageAdapter`, `TTSAdapter`, etc.) and lives in its own module. Modern bundlers eliminate everything you don't import.
+This is architectural, not incidental. Each adapter implements a specific interface (`TextAdapter`, `ImageAdapter`, `TTSAdapter`, etc.) and lives in its own module. Modern bundlers eliminate everything you don't import.
 
 ### Isomorphic Tools
 
@@ -120,7 +120,7 @@ const addToCartClient = addToCartDef.client(async ({ itemId, quantity }) => {
 
 The same schema validates inputs and outputs on both sides. The type system tracks whether a tool is a `ServerTool` or `ClientTool` at compile time.
 
-In Vercel AI SDK, tools are defined inline as objects passed to `generateText()` or `streamText()` — there's no shared definition that bridges server and client.
+Vercel AI SDK supports extracting tools via a `tool()` helper for reuse, but there's no shared definition that bridges server and client — tools don't have separate `.server()` and `.client()` implementations from a single contract.
 
 ### Composable Agent Loop Strategies
 
@@ -152,7 +152,7 @@ combineStrategies([
 ])
 ```
 
-Vercel AI SDK uses a single `ToolLoopAgent` class with `stopWhen: stepCountIs(n)`. The loop behavior is fixed — you can set a step limit, but you can't compose multiple stopping conditions or inject custom logic.
+Vercel AI SDK controls agent loops via the `maxSteps` parameter on `generateText()` and `streamText()`. You can set a step limit, but you can't compose multiple stopping conditions or inject custom logic into the loop.
 
 ### Lazy Tool Discovery
 
@@ -190,7 +190,7 @@ On top of this, TanStack AI provides **headless UI component libraries** for Rea
 
 ### Connection Adapters
 
-TanStack AI ships five connection adapters for different transport strategies:
+TanStack AI ships four built-in connection adapters plus a custom adapter interface:
 
 ```ts
 import {
@@ -360,7 +360,7 @@ const stream = chat({
 })
 ```
 
-**Vercel AI SDK** — Fixed loop with step limit:
+**Vercel AI SDK** — Step limit parameter:
 
 ```ts
 import { generateText } from 'ai'
@@ -368,12 +368,12 @@ import { generateText } from 'ai'
 const result = await generateText({
   model: openai('gpt-4o'),
   tools,
-  stopWhen: stepCountIs(10),
+  maxSteps: 10,
   prompt: 'Help me plan a trip.',
 })
 ```
 
-TanStack AI's approach lets you compose multiple conditions — iteration limits, finish reasons, token budgets, custom business logic — as simple functions. Vercel AI SDK's `stopWhen` is limited to predefined conditions.
+TanStack AI's approach lets you compose multiple conditions — iteration limits, finish reasons, token budgets, custom business logic — as simple functions. Vercel AI SDK's `maxSteps` is a single numeric limit without composable stopping conditions.
 
 ### Tree-Shaking
 
