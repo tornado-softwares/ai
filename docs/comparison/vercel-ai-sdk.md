@@ -25,7 +25,6 @@ This article compares the two SDKs from TanStack AI's perspective, with honest a
 | Agent Loop Control | Composable strategy functions | `maxSteps` parameter |
 | Tool Approval | Per-tool `needsApproval` with batched approval flow | Per-tool approval |
 | Type Safety | Per-model type narrowing | Per-provider types |
-| Schema Validation | Standard Schema v1 — designed around it from day one | Standard Schema v1 (added later) |
 | Tree-Shaking | Separate adapter per activity (text, image, speech, etc.) | Monolithic provider packages |
 | Lazy Tool Discovery | Built-in — token-optimized dynamic loading | — |
 | Connection Adapters | SSE, HTTP stream, RPC, direct async iterables, custom | SSE-based transport |
@@ -237,23 +236,6 @@ const adapter = myOpenai('my-fine-tuned-gpt4')
 ```
 
 Your custom models appear in autocomplete alongside official ones. Vercel AI SDK has no equivalent pattern.
-
-### Standard Schema Support
-
-TanStack AI isn't locked to Zod. Any library implementing the [Standard Schema v1](https://github.com/standard-schema/standard-schema) spec works — Zod, ArkType, Valibot, or custom implementations. Runtime validation uses each library's native `.validate()` function.
-
-```ts
-import { toolDefinition } from '@tanstack/ai'
-import { type } from 'arktype'
-
-// ArkType works just as well as Zod
-const tool = toolDefinition({
-  name: 'search',
-  inputSchema: type({ query: 'string', limit: 'number' }),
-})
-```
-
-While Vercel AI SDK also supports Standard Schema, TanStack AI was designed around it from the start — it's not an afterthought.
 
 ### No Platform Association
 
