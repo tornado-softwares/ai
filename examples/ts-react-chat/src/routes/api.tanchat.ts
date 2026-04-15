@@ -130,7 +130,9 @@ const tools = [
 async function typedStreamShowcase() {
   const stream = chat({
     adapter: openaiText('gpt-4o'),
-    messages: [{ role: 'user' as const, content: 'Recommend an acoustic guitar' }],
+    messages: [
+      { role: 'user' as const, content: 'Recommend an acoustic guitar' },
+    ],
     tools,
   })
 

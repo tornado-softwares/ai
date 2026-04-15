@@ -76,7 +76,9 @@ export interface TextActivityOptions<
   TAdapter extends AnyTextAdapter,
   TSchema extends SchemaInput | undefined,
   TStream extends boolean,
-  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<Tool<any, any, any>>,
+  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
+    Tool<any, any, any>
+  >,
 > {
   /** The text adapter to use (created by a provider function like openaiText('gpt-4o')) */
   adapter: TAdapter
@@ -189,7 +191,9 @@ export function createChatOptions<
   TAdapter extends AnyTextAdapter,
   TSchema extends SchemaInput | undefined = undefined,
   TStream extends boolean = true,
-  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<Tool<any, any, any>>,
+  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
+    Tool<any, any, any>
+  >,
 >(
   options: TextActivityOptions<TAdapter, TSchema, TStream, TTools>,
 ): TextActivityOptions<TAdapter, TSchema, TStream, TTools> {
@@ -212,7 +216,9 @@ export function createChatOptions<
 export type TextActivityResult<
   TSchema extends SchemaInput | undefined,
   TStream extends boolean = true,
-  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<Tool<any, any, any>>,
+  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
+    Tool<any, any, any>
+  >,
 > = TSchema extends SchemaInput
   ? Promise<InferSchemaType<TSchema>>
   : TStream extends false
@@ -1382,7 +1388,9 @@ export function chat<
   TAdapter extends AnyTextAdapter,
   TSchema extends SchemaInput | undefined = undefined,
   TStream extends boolean = true,
-  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<Tool<any, any, any>>,
+  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
+    Tool<any, any, any>
+  >,
 >(
   options: TextActivityOptions<TAdapter, TSchema, TStream, TTools>,
 ): TextActivityResult<TSchema, TStream, TTools> {

@@ -209,17 +209,13 @@ describe('TypedStreamChunk tool call type safety', () => {
 
       // Use toBeUnknown() instead of toEqualTypeOf<unknown>() —
       // the latter can't distinguish `any` from `unknown` in vitest.
-      expectTypeOf<
-        Exclude<E['end']['input'], undefined>
-      >().toBeUnknown()
+      expectTypeOf<Exclude<E['end']['input'], undefined>>().toBeUnknown()
     })
 
     it('should produce unknown input for plain JSON Schema tools', () => {
       type E = ToolEventsOf<[typeof jsonSchemaTool]>
 
-      expectTypeOf<
-        Exclude<E['end']['input'], undefined>
-      >().toBeUnknown()
+      expectTypeOf<Exclude<E['end']['input'], undefined>>().toBeUnknown()
     })
 
     it('should preserve tool names when mixing Zod and no-schema tools', () => {
@@ -236,9 +232,7 @@ describe('TypedStreamChunk tool call type safety', () => {
       type E = ToolEventsOf<[typeof weatherServerTool]>
 
       expectTypeOf<E['start']['toolName']>().toEqualTypeOf<'get_weather'>()
-      expectTypeOf<
-        Exclude<E['end']['input'], undefined>
-      >().toEqualTypeOf<{
+      expectTypeOf<Exclude<E['end']['input'], undefined>>().toEqualTypeOf<{
         location: string
         unit?: 'celsius' | 'fahrenheit'
       }>()
@@ -283,9 +277,7 @@ describe('TypedStreamChunk tool call type safety', () => {
       expectTypeOf<
         Extract<Chunk, { type: 'MESSAGES_SNAPSHOT' }>
       >().not.toBeNever()
-      expectTypeOf<
-        Extract<Chunk, { type: 'STATE_SNAPSHOT' }>
-      >().not.toBeNever()
+      expectTypeOf<Extract<Chunk, { type: 'STATE_SNAPSHOT' }>>().not.toBeNever()
       expectTypeOf<Extract<Chunk, { type: 'STATE_DELTA' }>>().not.toBeNever()
       expectTypeOf<Extract<Chunk, { type: 'CUSTOM' }>>().not.toBeNever()
     })
@@ -392,9 +384,7 @@ describe('TypedStreamChunk fallback behavior', () => {
 
     expectTypeOf<StartEventOf<Chunk>['toolName']>().toEqualTypeOf<string>()
     expectTypeOf<EndEventOf<Chunk>['toolName']>().toEqualTypeOf<string>()
-    expectTypeOf<
-      Exclude<EndEventOf<Chunk>['input'], undefined>
-    >().toBeUnknown()
+    expectTypeOf<Exclude<EndEventOf<Chunk>['input'], undefined>>().toBeUnknown()
   })
 
   it('should fallback to string/unknown with empty tools array', () => {
@@ -402,9 +392,7 @@ describe('TypedStreamChunk fallback behavior', () => {
 
     expectTypeOf<E['start']['toolName']>().toEqualTypeOf<string>()
     expectTypeOf<E['end']['toolName']>().toEqualTypeOf<string>()
-    expectTypeOf<
-      Exclude<E['end']['input'], undefined>
-    >().toBeUnknown()
+    expectTypeOf<Exclude<E['end']['input'], undefined>>().toBeUnknown()
   })
 
   it('should fallback to string/unknown when used without type args', () => {
@@ -415,9 +403,7 @@ describe('TypedStreamChunk fallback behavior', () => {
 
     expectTypeOf<E['start']['toolName']>().toEqualTypeOf<string>()
     expectTypeOf<E['end']['toolName']>().toEqualTypeOf<string>()
-    expectTypeOf<
-      Exclude<E['end']['input'], undefined>
-    >().toBeUnknown()
+    expectTypeOf<Exclude<E['end']['input'], undefined>>().toBeUnknown()
   })
 
   it('should handle readonly tools array (as const)', () => {
@@ -438,13 +424,13 @@ describe('backward compatibility', () => {
   it('should preserve unparameterized ToolCallStartEvent/ToolCallEndEvent defaults', () => {
     expectTypeOf<ToolCallStartEvent['toolName']>().toEqualTypeOf<string>()
     expectTypeOf<ToolCallEndEvent['toolName']>().toEqualTypeOf<string>()
-    expectTypeOf<
-      Exclude<ToolCallEndEvent['input'], undefined>
-    >().toBeUnknown()
+    expectTypeOf<Exclude<ToolCallEndEvent['input'], undefined>>().toBeUnknown()
   })
 
   it('should treat explicit defaults as identical to unparameterized', () => {
-    expectTypeOf<ToolCallStartEvent<string>>().toEqualTypeOf<ToolCallStartEvent>()
+    expectTypeOf<
+      ToolCallStartEvent<string>
+    >().toEqualTypeOf<ToolCallStartEvent>()
     expectTypeOf<
       ToolCallEndEvent<string, unknown>
     >().toEqualTypeOf<ToolCallEndEvent>()

@@ -845,8 +845,9 @@ export interface TextMessageEndEvent extends BaseAGUIEvent {
  *   When the stream is returned from `chat()` with typed tools, this narrows to
  *   the union of tool name literals.
  */
-export interface ToolCallStartEvent<TToolName extends string = string>
-  extends BaseAGUIEvent {
+export interface ToolCallStartEvent<
+  TToolName extends string = string,
+> extends BaseAGUIEvent {
   type: 'TOOL_CALL_START'
   /** Unique identifier for this tool call */
   toolCallId: string
@@ -998,12 +999,13 @@ export type StreamChunk = AGUIEvent
  * their union. When tools are untyped (generic `string`) or empty, returns `string`.
  * @internal
  */
-type ToolNamesOf<TTools extends ReadonlyArray<Tool<any, any, any>>> =
-  [TTools[number]] extends [never]
+type ToolNamesOf<TTools extends ReadonlyArray<Tool<any, any, any>>> = [
+  TTools[number],
+] extends [never]
+  ? string
+  : string extends TTools[number]['name']
     ? string
-    : string extends TTools[number]['name']
-      ? string
-      : TTools[number]['name']
+    : TTools[number]['name']
 
 /**
  * Detect the `any` type. Returns `true` for `any`, `false` for everything else.
@@ -1021,16 +1023,17 @@ type IsAny<T> = 0 extends 1 & T ? true : false
  * defaults to the broad `SchemaInput` union (which includes `StandardJSONSchemaV1<any, any>`).
  * @internal
  */
-type ToolInputsOf<TTools extends ReadonlyArray<Tool<any, any, any>>> =
-  [TTools[number]] extends [never]
+type ToolInputsOf<TTools extends ReadonlyArray<Tool<any, any, any>>> = [
+  TTools[number],
+] extends [never]
+  ? unknown
+  : string extends TTools[number]['name']
     ? unknown
-    : string extends TTools[number]['name']
-      ? unknown
-      : TTools[number] extends { inputSchema?: infer TInput }
-        ? IsAny<InferSchemaType<NonNullable<TInput>>> extends true
-          ? unknown
-          : InferSchemaType<NonNullable<TInput>>
-        : unknown
+    : TTools[number] extends { inputSchema?: infer TInput }
+      ? IsAny<InferSchemaType<NonNullable<TInput>>> extends true
+        ? unknown
+        : InferSchemaType<NonNullable<TInput>>
+      : unknown
 
 /**
  * Stream chunk type parameterized by the tools array for type-safe tool call events.
@@ -1043,9 +1046,14 @@ type ToolInputsOf<TTools extends ReadonlyArray<Tool<any, any, any>>> =
  * When tools are untyped or absent, degrades to the same type as `StreamChunk`.
  */
 export type TypedStreamChunk<
-  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<Tool<any, any, any>>,
+  TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
+    Tool<any, any, any>
+  >,
 > =
-  | Exclude<StreamChunk, { type: 'TOOL_CALL_START' } | { type: 'TOOL_CALL_END' }>
+  | Exclude<
+      StreamChunk,
+      { type: 'TOOL_CALL_START' } | { type: 'TOOL_CALL_END' }
+    >
   | ToolCallStartEvent<ToolNamesOf<TTools>>
   | ToolCallEndEvent<ToolNamesOf<TTools>, ToolInputsOf<TTools>>
 
