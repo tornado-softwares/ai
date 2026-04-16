@@ -24,8 +24,9 @@ Defined in: [types.ts:1033](https://github.com/TanStack/ai/blob/main/packages/ty
 
 A variant of `StreamChunk` parameterized by the tools array. When specific tool types are provided (e.g. from `chat({ tools: [myTool] })`):
 
-- `TOOL_CALL_START` and `TOOL_CALL_END` events have `toolName` narrowed to the union of known tool name literals.
-- `TOOL_CALL_END` events have `input` typed as the union of tool input types.
+- `TOOL_CALL_START` and `TOOL_CALL_END` events form a **discriminated union** over tool names.
+- Checking `toolName === 'x'` narrows `input` to that specific tool's input type.
+- `TOOL_CALL_END` events have `input` typed per-tool via Zod schema inference.
 
 When tools are untyped or absent, `TypedStreamChunk` degrades to the same type as `StreamChunk`.
 

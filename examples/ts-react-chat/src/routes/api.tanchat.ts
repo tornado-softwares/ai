@@ -149,16 +149,18 @@ async function typedStreamShowcase() {
         break
 
       case 'TOOL_CALL_END':
-        // ✅ chunk.toolName — same typed literal union as above
-        // ✅ chunk.input   — union of all tool input types, inferred from Zod schemas:
-        //    | {}
-        //    | { id: string | number }
-        //    | { guitarId: string; quantity: number }
-        //    | { guitarId: string }
-        //    | { guitarIds: number[] }
-        //    | { guitarId: number; months: number }
-        //    | { query: string }
-        console.log(`Tool call ended: ${chunk.toolName}`, chunk.input)
+        // ✅ Discriminated union — checking toolName narrows input to that tool's type
+        if (chunk.toolName === 'searchGuitars') {
+          // ✅ chunk.input is { query: string } (not the full union)
+          console.log(`Searching for: ${chunk.input?.query}`)
+        } else if (chunk.toolName === 'calculateFinancing') {
+          // ✅ chunk.input is { guitarId: number; months: number }
+          console.log(
+            `Financing guitar ${chunk.input?.guitarId} for ${chunk.input?.months} months`,
+          )
+        } else {
+          console.log(`Tool call ended: ${chunk.toolName}`, chunk.input)
+        }
         break
 
       case 'TEXT_MESSAGE_CONTENT':

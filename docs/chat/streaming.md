@@ -112,7 +112,31 @@ for await (const chunk of stream) {
 
 Without typed tools, `toolName` defaults to `string` and `input` defaults to `unknown` — the same behavior as before. The type narrowing is automatic when you use `toolDefinition()` with Zod schemas.
 
-> **Note:** When multiple tools are provided, `input` is typed as the union of all tool input types. Checking `toolName === 'get_weather'` does not narrow `input` to that specific tool's input type — if you need per-tool discrimination, use a type guard after the `toolName` check.
+When multiple tools are provided, tool call events form a **discriminated union** — checking `toolName` narrows `input` to that specific tool's type:
+
+```typescript
+const searchTool = toolDefinition({
+  name: "search",
+  inputSchema: z.object({ query: z.string() }),
+});
+
+const stream = chat({
+  adapter: openaiText("gpt-5.2"),
+  messages,
+  tools: [weatherTool, searchTool],
+});
+
+for await (const chunk of stream) {
+  if (chunk.type === "TOOL_CALL_END") {
+    if (chunk.toolName === "get_weather") {
+      chunk.input; // ✅ { location: string; unit?: "celsius" | "fahrenheit" }
+    }
+    if (chunk.toolName === "search") {
+      chunk.input; // ✅ { query: string }
+    }
+  }
+}
+```
 
 > **Tip:** The typed stream chunk type is exported as `TypedStreamChunk<TTools>` if you need to annotate variables or function parameters. When used without type arguments, `TypedStreamChunk` is equivalent to `StreamChunk`.
 

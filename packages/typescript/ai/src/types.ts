@@ -994,54 +994,72 @@ export type StreamChunk = AGUIEvent
 // ============================================================================
 
 /**
- * Extract tool name literals from a tools array type.
- * When tools have specific name literals (e.g. `'get_weather'`), returns
- * their union. When tools are untyped (generic `string`) or empty, returns `string`.
- * @internal
- */
-type ToolNamesOf<TTools extends ReadonlyArray<Tool<any, any, any>>> = [
-  TTools[number],
-] extends [never]
-  ? string
-  : string extends TTools[number]['name']
-    ? string
-    : TTools[number]['name']
-
-/**
  * Detect the `any` type. Returns `true` for `any`, `false` for everything else.
  * @internal
  */
 type IsAny<T> = 0 extends 1 & T ? true : false
 
 /**
- * Infer the union of tool input types from a tools array type.
- * When tools have specific name literals (indicating typed tool definitions),
- * returns the union of their inferred input types via `InferSchemaType`.
- * When tool names are generic `string` or the tools array is empty, returns `unknown`.
- *
- * Guards against `any` leaking through `InferSchemaType` when `inputSchema`
- * defaults to the broad `SchemaInput` union (which includes `StandardJSONSchemaV1<any, any>`).
+ * Check whether the tools array carries typed tool definitions.
+ * Returns `false` for empty arrays or arrays with generic `string` names.
  * @internal
  */
-type ToolInputsOf<TTools extends ReadonlyArray<Tool<any, any, any>>> = [
+type HasTypedTools<TTools extends ReadonlyArray<Tool<any, any, any>>> = [
   TTools[number],
 ] extends [never]
-  ? unknown
+  ? false
   : string extends TTools[number]['name']
+    ? false
+    : true
+
+/**
+ * Safely infer input type for a single tool, guarding against `any` leaks.
+ * Returns `unknown` when the tool has no inputSchema or when InferSchemaType
+ * produces `any` (e.g. for plain JSON Schema tools).
+ * @internal
+ */
+type SafeToolInput<T extends Tool<any, any, any>> = T extends {
+  inputSchema?: infer TInput
+}
+  ? IsAny<InferSchemaType<NonNullable<TInput>>> extends true
     ? unknown
-    : TTools[number] extends { inputSchema?: infer TInput }
-      ? IsAny<InferSchemaType<NonNullable<TInput>>> extends true
-        ? unknown
-        : InferSchemaType<NonNullable<TInput>>
-      : unknown
+    : InferSchemaType<NonNullable<TInput>>
+  : unknown
+
+/**
+ * Distribute over each tool to create a per-tool `ToolCallStartEvent`.
+ * This produces a discriminated union — one variant per tool name literal.
+ * @internal
+ */
+type DistributedToolCallStart<
+  TTools extends ReadonlyArray<Tool<any, any, any>>,
+> = TTools[number] extends infer T
+  ? T extends Tool<any, any, infer TName>
+    ? ToolCallStartEvent<TName>
+    : never
+  : never
+
+/**
+ * Distribute over each tool to create a per-tool `ToolCallEndEvent`.
+ * Each variant pairs the tool's name literal with its specific input type,
+ * enabling discriminated narrowing: checking `toolName === 'x'` narrows `input`.
+ * @internal
+ */
+type DistributedToolCallEnd<
+  TTools extends ReadonlyArray<Tool<any, any, any>>,
+> = TTools[number] extends infer T
+  ? T extends Tool<any, any, infer TName>
+    ? ToolCallEndEvent<TName, SafeToolInput<T & Tool<any, any, any>>>
+    : never
+  : never
 
 /**
  * Stream chunk type parameterized by the tools array for type-safe tool call events.
  *
  * When specific tool types are provided (e.g. from `chat({ tools: [myTool] })`):
- * - `TOOL_CALL_START` and `TOOL_CALL_END` events have `toolName` narrowed to
- *   the union of known tool name literals.
- * - `TOOL_CALL_END` events have `input` typed as the union of tool input types.
+ * - `TOOL_CALL_START` and `TOOL_CALL_END` events form a **discriminated union**
+ *   over tool names — checking `toolName === 'x'` narrows `input` to that tool's type.
+ * - `TOOL_CALL_END` events have `input` typed per-tool via Zod schema inference.
  *
  * When tools are untyped or absent, degrades to the same type as `StreamChunk`.
  */
@@ -1049,13 +1067,15 @@ export type TypedStreamChunk<
   TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
     Tool<any, any, any>
   >,
-> =
-  | Exclude<
-      StreamChunk,
-      { type: 'TOOL_CALL_START' } | { type: 'TOOL_CALL_END' }
-    >
-  | ToolCallStartEvent<ToolNamesOf<TTools>>
-  | ToolCallEndEvent<ToolNamesOf<TTools>, ToolInputsOf<TTools>>
+> = HasTypedTools<TTools> extends true
+  ?
+      | Exclude<
+          StreamChunk,
+          { type: 'TOOL_CALL_START' } | { type: 'TOOL_CALL_END' }
+        >
+      | DistributedToolCallStart<TTools>
+      | DistributedToolCallEnd<TTools>
+  : StreamChunk
 
 // Simple streaming format for basic text completions
 // Converted to StreamChunk format by convertTextCompletionStream()

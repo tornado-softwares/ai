@@ -227,6 +227,94 @@ describe('TypedStreamChunk tool call type safety', () => {
     })
   })
 
+  describe('discriminated union narrowing', () => {
+    it('should narrow input to specific tool type when checking toolName', () => {
+      type Chunk = TypedStreamChunk<[typeof weatherTool, typeof searchTool]>
+      type End = Extract<Chunk, { type: 'TOOL_CALL_END' }>
+
+      // Narrowing by toolName should give the specific tool's input type
+      type WeatherEnd = Extract<End, { toolName: 'get_weather' }>
+      expectTypeOf<
+        Exclude<WeatherEnd['input'], undefined>
+      >().toEqualTypeOf<{ location: string; unit?: 'celsius' | 'fahrenheit' }>()
+
+      type SearchEnd = Extract<End, { toolName: 'search' }>
+      expectTypeOf<
+        Exclude<SearchEnd['input'], undefined>
+      >().toEqualTypeOf<{ query: string }>()
+    })
+
+    it('should narrow START events by toolName', () => {
+      type Chunk = TypedStreamChunk<[typeof weatherTool, typeof searchTool]>
+      type Start = Extract<Chunk, { type: 'TOOL_CALL_START' }>
+
+      type WeatherStart = Extract<Start, { toolName: 'get_weather' }>
+      expectTypeOf<WeatherStart['toolName']>().toEqualTypeOf<'get_weather'>()
+
+      type SearchStart = Extract<Start, { toolName: 'search' }>
+      expectTypeOf<SearchStart['toolName']>().toEqualTypeOf<'search'>()
+    })
+
+    it('should narrow input with three or more tools', () => {
+      type Chunk = TypedStreamChunk<
+        [typeof weatherTool, typeof searchTool, typeof noInputTool]
+      >
+      type End = Extract<Chunk, { type: 'TOOL_CALL_END' }>
+
+      type WeatherEnd = Extract<End, { toolName: 'get_weather' }>
+      expectTypeOf<
+        Exclude<WeatherEnd['input'], undefined>
+      >().toEqualTypeOf<{ location: string; unit?: 'celsius' | 'fahrenheit' }>()
+
+      type SearchEnd = Extract<End, { toolName: 'search' }>
+      expectTypeOf<
+        Exclude<SearchEnd['input'], undefined>
+      >().toEqualTypeOf<{ query: string }>()
+
+      type TimeEnd = Extract<End, { toolName: 'get_time' }>
+      expectTypeOf<Exclude<TimeEnd['input'], undefined>>().toBeUnknown()
+    })
+
+    it('should narrow input through chat() return type', () => {
+      const stream = chat({
+        adapter: mockAdapter,
+        messages: [],
+        tools: [weatherTool, searchTool],
+      })
+      type Chunk = ChunkOf<typeof stream>
+      type End = Extract<Chunk, { type: 'TOOL_CALL_END' }>
+
+      type WeatherEnd = Extract<End, { toolName: 'get_weather' }>
+      expectTypeOf<
+        Exclude<WeatherEnd['input'], undefined>
+      >().toEqualTypeOf<{ location: string; unit?: 'celsius' | 'fahrenheit' }>()
+
+      type SearchEnd = Extract<End, { toolName: 'search' }>
+      expectTypeOf<
+        Exclude<SearchEnd['input'], undefined>
+      >().toEqualTypeOf<{ query: string }>()
+    })
+
+    it('should narrow input with server tool variants', () => {
+      type Chunk = TypedStreamChunk<
+        [typeof weatherServerTool, typeof searchClientTool]
+      >
+      type End = Extract<Chunk, { type: 'TOOL_CALL_END' }>
+
+      type WeatherEnd = Extract<End, { toolName: 'get_weather' }>
+      expectTypeOf<
+        Exclude<WeatherEnd['input'], undefined>
+      >().toEqualTypeOf<{ location: string; unit?: 'celsius' | 'fahrenheit' }>()
+
+      type SearchEnd = Extract<End, { toolName: 'search' }>
+      // searchClientTool doesn't have a Zod inputSchema on the client variant,
+      // so its input should be narrowed per-tool (query: string from the base def)
+      expectTypeOf<
+        Exclude<SearchEnd['input'], undefined>
+      >().toEqualTypeOf<{ query: string }>()
+    })
+  })
+
   describe('server and client tool variants', () => {
     it('should type ServerTool name and input from .server()', () => {
       type E = ToolEventsOf<[typeof weatherServerTool]>
