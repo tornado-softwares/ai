@@ -1045,13 +1045,12 @@ type DistributedToolCallStart<
  * enabling discriminated narrowing: checking `toolName === 'x'` narrows `input`.
  * @internal
  */
-type DistributedToolCallEnd<
-  TTools extends ReadonlyArray<Tool<any, any, any>>,
-> = TTools[number] extends infer T
-  ? T extends Tool<any, any, infer TName>
-    ? ToolCallEndEvent<TName, SafeToolInput<T & Tool<any, any, any>>>
+type DistributedToolCallEnd<TTools extends ReadonlyArray<Tool<any, any, any>>> =
+  TTools[number] extends infer T
+    ? T extends Tool<any, any, infer TName>
+      ? ToolCallEndEvent<TName, SafeToolInput<T & Tool<any, any, any>>>
+      : never
     : never
-  : never
 
 /**
  * Stream chunk type parameterized by the tools array for type-safe tool call events.
@@ -1067,15 +1066,16 @@ export type TypedStreamChunk<
   TTools extends ReadonlyArray<Tool<any, any, any>> = ReadonlyArray<
     Tool<any, any, any>
   >,
-> = HasTypedTools<TTools> extends true
-  ?
-      | Exclude<
-          StreamChunk,
-          { type: 'TOOL_CALL_START' } | { type: 'TOOL_CALL_END' }
-        >
-      | DistributedToolCallStart<TTools>
-      | DistributedToolCallEnd<TTools>
-  : StreamChunk
+> =
+  HasTypedTools<TTools> extends true
+    ?
+        | Exclude<
+            StreamChunk,
+            { type: 'TOOL_CALL_START' } | { type: 'TOOL_CALL_END' }
+          >
+        | DistributedToolCallStart<TTools>
+        | DistributedToolCallEnd<TTools>
+    : StreamChunk
 
 // Simple streaming format for basic text completions
 // Converted to StreamChunk format by convertTextCompletionStream()
