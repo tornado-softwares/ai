@@ -295,6 +295,7 @@ export async function toJSONResponse(
     throw error
   }
   const merged = new Headers(headers)
-  if (!merged.has('Content-Type')) merged.set('Content-Type', 'application/json')
+  if (!merged.has('Content-Type'))
+    merged.set('Content-Type', 'application/json')
   return new Response(JSON.stringify(chunks), { ...rest, headers: merged })
 }

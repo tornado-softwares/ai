@@ -937,9 +937,9 @@ describe('toJSONResponse', () => {
       throw new Error('upstream failure')
     }
 
-    await expect(toJSONResponse(failing(), { abortController })).rejects.toThrow(
-      'upstream failure',
-    )
+    await expect(
+      toJSONResponse(failing(), { abortController }),
+    ).rejects.toThrow('upstream failure')
     expect(abortSpy).toHaveBeenCalledOnce()
   })
 })
