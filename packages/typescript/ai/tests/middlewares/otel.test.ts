@@ -429,3 +429,99 @@ describe('otelMiddleware — tool-message and choice events', () => {
     expect(choice.attributes!['content']).toBe('Hello world')
   })
 })
+
+describe('otelMiddleware — extension points', () => {
+  it('spanNameFormatter overrides default names', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({
+      tracer,
+      spanNameFormatter: (info) => {
+        if (info.kind === 'chat') return 'my-chat'
+        if (info.kind === 'iteration') return `iter-${info.iteration}`
+        return `tool-${info.toolName}`
+      },
+    })
+    const ctx = makeCtx({ hasTools: true })
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+    await mw.onBeforeToolCall?.(ctx, {
+      toolCall: { id: 't-1', type: 'function', function: { name: 'lookup', arguments: '{}' } } as any,
+      tool: undefined, args: {}, toolName: 'lookup', toolCallId: 't-1',
+    })
+
+    expect(spans[0]!.name).toBe('my-chat')
+    expect(spans[1]!.name).toBe('iter-0')
+    expect(spans[2]!.name).toBe('tool-lookup')
+  })
+
+  it('attributeEnricher merges attributes onto every span', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({
+      tracer,
+      attributeEnricher: (info) => ({ 'test.kind': info.kind }),
+    })
+    const ctx = makeCtx()
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+
+    expect(spans[0]!.attributes['test.kind']).toBe('chat')
+    expect(spans[1]!.attributes['test.kind']).toBe('iteration')
+  })
+
+  it('onBeforeSpanStart can mutate SpanOptions before startSpan', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({
+      tracer,
+      onBeforeSpanStart: (_info, options) => ({
+        ...options,
+        attributes: { ...(options.attributes ?? {}), 'custom.start': true },
+      }),
+    })
+    const ctx = makeCtx()
+
+    await mw.onStart?.(ctx)
+
+    expect(spans[0]!.attributes['custom.start']).toBe(true)
+  })
+
+  it('onSpanEnd fires before span.end()', async () => {
+    const { tracer } = createFakeTracer()
+    const seen: Array<{ kind: string; ended: boolean }> = []
+    const mw = otelMiddleware({
+      tracer,
+      onSpanEnd: (info, span) => {
+        seen.push({ kind: info.kind, ended: (span as any).ended })
+      },
+    })
+    const ctx = makeCtx()
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+    await mw.onChunk?.(ctx, { type: EventType.RUN_FINISHED, threadId: 't-1', runId: 'r', model: 'gpt-4o', timestamp: 0, finishReason: 'stop' })
+    await mw.onFinish?.(ctx, { finishReason: 'stop', duration: 1, content: '' })
+
+    expect(seen.map((s) => s.kind)).toEqual(['iteration', 'chat'])
+    expect(seen.every((s) => s.ended === false)).toBe(true)
+  })
+
+  it('throwing user callback does NOT break the chat run', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({
+      tracer,
+      attributeEnricher: () => { throw new Error('boom') },
+    })
+    const ctx = makeCtx()
+
+    // onStart and onFinish must not throw even when attributeEnricher throws
+    expect(() => mw.onStart?.(ctx)).not.toThrow()
+    expect(() =>
+      mw.onFinish?.(ctx, { finishReason: 'stop', duration: 1, content: '' }),
+    ).not.toThrow()
+    expect(spans[0]!.ended).toBe(true)
+  })
+})
