@@ -205,8 +205,8 @@ export function createFakeMeter(): FakeMeter {
  */
 export function makeToolCall(
   overrides: { id: string } & Partial<Omit<ToolCall, 'function'>> & {
-    function?: Partial<ToolCall['function']>
-  },
+      function?: Partial<ToolCall['function']>
+    },
 ): ToolCall {
   return {
     id: overrides.id,

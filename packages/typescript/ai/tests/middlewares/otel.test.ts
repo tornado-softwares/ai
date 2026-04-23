@@ -409,11 +409,21 @@ describe('otelMiddleware — error and abort paths', () => {
 
   it('onError fires onSpanEnd for open tool spans before ending them', async () => {
     const { tracer } = createFakeTracer()
-    const seen: Array<{ kind: string; toolName?: string; toolCallId?: string; ended: boolean }> = []
+    const seen: Array<{
+      kind: string
+      toolName?: string
+      toolCallId?: string
+      ended: boolean
+    }> = []
     const mw = otelMiddleware({
       tracer,
       onSpanEnd: (info, span) => {
-        seen.push({ kind: info.kind, toolName: info.toolName, toolCallId: info.toolCallId, ended: (span as FakeSpan).ended })
+        seen.push({
+          kind: info.kind,
+          toolName: info.toolName,
+          toolCallId: info.toolCallId,
+          ended: (span as FakeSpan).ended,
+        })
       },
     })
     const ctx = makeCtx({ hasTools: true })
@@ -440,18 +450,31 @@ describe('otelMiddleware — error and abort paths', () => {
 
   it('onAbort fires onSpanEnd for open tool spans before ending them', async () => {
     const { tracer } = createFakeTracer()
-    const seen: Array<{ kind: string; toolName?: string; toolCallId?: string; ended: boolean }> = []
+    const seen: Array<{
+      kind: string
+      toolName?: string
+      toolCallId?: string
+      ended: boolean
+    }> = []
     const mw = otelMiddleware({
       tracer,
       onSpanEnd: (info, span) => {
-        seen.push({ kind: info.kind, toolName: info.toolName, toolCallId: info.toolCallId, ended: (span as FakeSpan).ended })
+        seen.push({
+          kind: info.kind,
+          toolName: info.toolName,
+          toolCallId: info.toolCallId,
+          ended: (span as FakeSpan).ended,
+        })
       },
     })
     const ctx = makeCtx({ hasTools: true })
 
     await runToIterationStart(mw, ctx)
     await mw.onBeforeToolCall?.(ctx, {
-      toolCall: makeToolCall({ id: 'tc-abort', function: { name: 'slow_tool' } }),
+      toolCall: makeToolCall({
+        id: 'tc-abort',
+        function: { name: 'slow_tool' },
+      }),
       tool: undefined,
       args: {},
       toolName: 'slow_tool',
