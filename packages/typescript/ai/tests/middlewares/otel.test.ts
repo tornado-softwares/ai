@@ -430,6 +430,42 @@ describe('otelMiddleware — tool-message and choice events', () => {
   })
 })
 
+describe('otelMiddleware — concurrent isolation', () => {
+  it('parallel chat() calls do not cross-contaminate state', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({ tracer })
+
+    const ctxA = makeCtx({ requestId: 'A' })
+    const ctxB = makeCtx({ requestId: 'B' })
+
+    await Promise.all([mw.onStart?.(ctxA), mw.onStart?.(ctxB)])
+    ctxA.phase = 'beforeModel'
+    ctxB.phase = 'beforeModel'
+    await Promise.all([
+      mw.onConfig?.(ctxA, { messages: [], systemPrompts: [], tools: [] }),
+      mw.onConfig?.(ctxB, { messages: [], systemPrompts: [], tools: [] }),
+    ])
+    await Promise.all([
+      mw.onChunk?.(ctxA, { type: EventType.RUN_FINISHED, threadId: 't-A', runId: 'A', model: 'gpt-4o', timestamp: 0, finishReason: 'stop' }),
+      mw.onChunk?.(ctxB, { type: EventType.RUN_FINISHED, threadId: 't-B', runId: 'B', model: 'gpt-4o', timestamp: 0, finishReason: 'tool_calls' }),
+    ])
+    await Promise.all([
+      mw.onFinish?.(ctxA, { finishReason: 'stop', duration: 1, content: '' }),
+      mw.onFinish?.(ctxB, { finishReason: 'tool_calls', duration: 1, content: '' }),
+    ])
+
+    // Total: 2 root spans + 2 iteration spans, all ended.
+    expect(spans.filter((s) => s.ended).length).toBe(4)
+    // Each iteration has its own finish_reason.
+    const iters = spans.filter((s) => s.parent !== null)
+    const reasons = iters.flatMap((s) => {
+      const v = s.attributes['gen_ai.response.finish_reasons']
+      return Array.isArray(v) ? (v as string[]) : []
+    })
+    expect(reasons).toEqual(expect.arrayContaining(['stop', 'tool_calls']))
+  })
+})
+
 describe('otelMiddleware — extension points', () => {
   it('spanNameFormatter overrides default names', async () => {
     const { tracer, spans } = createFakeTracer()
