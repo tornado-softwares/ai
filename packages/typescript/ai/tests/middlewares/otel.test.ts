@@ -442,11 +442,21 @@ describe('otelMiddleware — error and abort paths', () => {
 
   it('onError fires onSpanEnd for open tool spans before ending them', async () => {
     const { tracer } = createFakeTracer()
-    const seen: Array<{ kind: string; toolName?: string; toolCallId?: string; ended: boolean }> = []
+    const seen: Array<{
+      kind: string
+      toolName?: string
+      toolCallId?: string
+      ended: boolean
+    }> = []
     const mw = otelMiddleware({
       tracer,
       onSpanEnd: (info, span) => {
-        seen.push({ kind: info.kind, toolName: info.toolName, toolCallId: info.toolCallId, ended: (span as any).ended })
+        seen.push({
+          kind: info.kind,
+          toolName: info.toolName,
+          toolCallId: info.toolCallId,
+          ended: (span as any).ended,
+        })
       },
     })
     const ctx = makeCtx({ hasTools: true })
@@ -455,7 +465,11 @@ describe('otelMiddleware — error and abort paths', () => {
     ctx.phase = 'beforeModel'
     await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
     await mw.onBeforeToolCall?.(ctx, {
-      toolCall: { id: 'tc-err', type: 'function', function: { name: 'my_tool', arguments: '{}' } } as any,
+      toolCall: {
+        id: 'tc-err',
+        type: 'function',
+        function: { name: 'my_tool', arguments: '{}' },
+      } as any,
       tool: undefined,
       args: {},
       toolName: 'my_tool',
@@ -475,11 +489,21 @@ describe('otelMiddleware — error and abort paths', () => {
 
   it('onAbort fires onSpanEnd for open tool spans before ending them', async () => {
     const { tracer } = createFakeTracer()
-    const seen: Array<{ kind: string; toolName?: string; toolCallId?: string; ended: boolean }> = []
+    const seen: Array<{
+      kind: string
+      toolName?: string
+      toolCallId?: string
+      ended: boolean
+    }> = []
     const mw = otelMiddleware({
       tracer,
       onSpanEnd: (info, span) => {
-        seen.push({ kind: info.kind, toolName: info.toolName, toolCallId: info.toolCallId, ended: (span as any).ended })
+        seen.push({
+          kind: info.kind,
+          toolName: info.toolName,
+          toolCallId: info.toolCallId,
+          ended: (span as any).ended,
+        })
       },
     })
     const ctx = makeCtx({ hasTools: true })
@@ -488,7 +512,11 @@ describe('otelMiddleware — error and abort paths', () => {
     ctx.phase = 'beforeModel'
     await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
     await mw.onBeforeToolCall?.(ctx, {
-      toolCall: { id: 'tc-abort', type: 'function', function: { name: 'slow_tool', arguments: '{}' } } as any,
+      toolCall: {
+        id: 'tc-abort',
+        type: 'function',
+        function: { name: 'slow_tool', arguments: '{}' },
+      } as any,
       tool: undefined,
       args: {},
       toolName: 'slow_tool',
