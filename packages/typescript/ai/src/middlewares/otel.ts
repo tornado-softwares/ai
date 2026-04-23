@@ -5,7 +5,7 @@ import type {
   SpanOptions,
   Tracer,
 } from '@opentelemetry/api'
-import { context as otelContext, trace as otelTrace } from '@opentelemetry/api'
+import { context as otelContext, trace as otelTrace, SpanStatusCode } from '@opentelemetry/api'
 import type {
   ChatMiddleware,
   ChatMiddlewareContext,
@@ -205,6 +205,68 @@ export function otelMiddleware(
           tokenHistogram.record(usage.promptTokens, { ...metricAttrs, 'gen_ai.token.type': 'input' })
           tokenHistogram.record(usage.completionTokens, { ...metricAttrs, 'gen_ai.token.type': 'output' })
         }
+      })
+    },
+
+    onBeforeToolCall(ctx, hookCtx) {
+      safeCall('otel.onBeforeToolCall', () => {
+        const state = stateByCtx.get(ctx)
+        if (!state || !state.currentIterationSpan) return
+
+        const info: OtelSpanInfo<'tool'> = {
+          kind: 'tool',
+          ctx,
+          toolName: hookCtx.toolName,
+          toolCallId: hookCtx.toolCallId,
+          iteration: state.iterationCount - 1,
+        }
+        const name = safeCall('otel.spanNameFormatter', () => spanNameFormatter?.(info)) ?? `execute_tool ${hookCtx.toolName}`
+
+        const baseAttrs: Record<string, AttributeValue> = {
+          'gen_ai.tool.name': hookCtx.toolName,
+          'gen_ai.tool.call.id': hookCtx.toolCallId,
+          'gen_ai.tool.type': 'function',
+        }
+        const baseOptions: SpanOptions = { attributes: baseAttrs }
+        const spanOptions = safeCall('otel.onBeforeSpanStart', () => onBeforeSpanStart?.(info, baseOptions)) ?? baseOptions
+
+        let toolSpan!: Span
+        otelContext.with(otelTrace.setSpan(otelContext.active(), state.currentIterationSpan), () => {
+          toolSpan = tracer.startSpan(name, spanOptions)
+        })
+        ;(toolSpan as unknown as { parent?: Span }).parent = state.currentIterationSpan
+
+        const enriched = safeCall('otel.attributeEnricher', () => attributeEnricher?.(info))
+        if (enriched) toolSpan.setAttributes(enriched)
+
+        state.toolSpans.set(hookCtx.toolCallId, toolSpan)
+      })
+      return undefined
+    },
+
+    onAfterToolCall(ctx, info) {
+      safeCall('otel.onAfterToolCall', () => {
+        const state = stateByCtx.get(ctx)
+        if (!state) return
+        const toolSpan = state.toolSpans.get(info.toolCallId)
+        if (!toolSpan) return
+
+        const outcome = info.ok ? 'success' : 'error'
+        toolSpan.setAttribute('tanstack.ai.tool.outcome', outcome)
+
+        if (!info.ok && info.error !== undefined) {
+          toolSpan.recordException(info.error as Error)
+          toolSpan.setStatus({ code: SpanStatusCode.ERROR, message: (info.error as Error)?.message })
+        }
+
+        safeCall('otel.onSpanEnd', () =>
+          onSpanEnd?.(
+            { kind: 'tool', ctx, toolName: info.toolName, toolCallId: info.toolCallId, iteration: state.iterationCount - 1 },
+            toolSpan,
+          ),
+        )
+        toolSpan.end()
+        state.toolSpans.delete(info.toolCallId)
       })
     },
 

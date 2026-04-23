@@ -138,3 +138,77 @@ describe('otelMiddleware — token histogram', () => {
     await mw.onUsage?.(ctx, { promptTokens: 100, completionTokens: 50, totalTokens: 150 })
   })
 })
+
+describe('otelMiddleware — tool spans', () => {
+  it('creates a tool span as child of the iteration span', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({ tracer })
+    const ctx = makeCtx({ hasTools: true, toolNames: ['get_weather'] })
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+
+    const iterSpan = spans[1]!
+    await mw.onBeforeToolCall?.(ctx, {
+      toolCall: { id: 'tc-1', type: 'function', function: { name: 'get_weather', arguments: '{}' } } as any,
+      tool: undefined,
+      args: { city: 'NYC' },
+      toolName: 'get_weather',
+      toolCallId: 'tc-1',
+    })
+
+    const toolSpan = spans[2]!
+    expect(toolSpan.name).toBe('execute_tool get_weather')
+    expect(toolSpan.parent).toBe(iterSpan)
+    expect(toolSpan.attributes['gen_ai.tool.name']).toBe('get_weather')
+    expect(toolSpan.attributes['gen_ai.tool.call.id']).toBe('tc-1')
+    expect(toolSpan.attributes['gen_ai.tool.type']).toBe('function')
+    expect(toolSpan.ended).toBe(false)
+
+    await mw.onAfterToolCall?.(ctx, {
+      toolCall: { id: 'tc-1' } as any,
+      tool: undefined,
+      toolName: 'get_weather',
+      toolCallId: 'tc-1',
+      ok: true,
+      duration: 42,
+      result: { temp: 72 },
+    })
+
+    expect(toolSpan.ended).toBe(true)
+    expect(toolSpan.attributes['tanstack.ai.tool.outcome']).toBe('success')
+  })
+
+  it('records exception and error outcome on tool failure', async () => {
+    const { tracer, spans } = createFakeTracer()
+    const mw = otelMiddleware({ tracer })
+    const ctx = makeCtx({ hasTools: true })
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+    await mw.onBeforeToolCall?.(ctx, {
+      toolCall: { id: 'tc-2', type: 'function', function: { name: 'broken', arguments: '{}' } } as any,
+      tool: undefined,
+      args: {},
+      toolName: 'broken',
+      toolCallId: 'tc-2',
+    })
+    const toolSpan = spans[2]!
+    await mw.onAfterToolCall?.(ctx, {
+      toolCall: { id: 'tc-2' } as any,
+      tool: undefined,
+      toolName: 'broken',
+      toolCallId: 'tc-2',
+      ok: false,
+      duration: 5,
+      error: new Error('boom'),
+    })
+
+    expect(toolSpan.attributes['tanstack.ai.tool.outcome']).toBe('error')
+    expect(toolSpan.exceptions).toHaveLength(1)
+    expect((toolSpan.exceptions[0]!.exception as Error).message).toBe('boom')
+    expect(toolSpan.status.code).toBe(SpanStatusCode.ERROR)
+  })
+})
