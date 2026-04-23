@@ -1,4 +1,5 @@
 import {
+  SpanKind,
   SpanStatusCode,
   context as otelContext,
   trace as otelTrace,
@@ -30,7 +31,6 @@ export interface OtelMiddlewareOptions {
   meter?: Meter
   captureContent?: boolean
   redact?: (text: string) => string
-  serviceName?: string
   spanNameFormatter?: (info: OtelSpanInfo) => string
   attributeEnricher?: (info: OtelSpanInfo) => Record<string, AttributeValue>
   onBeforeSpanStart?: (info: OtelSpanInfo, options: SpanOptions) => SpanOptions
@@ -40,7 +40,7 @@ export interface OtelMiddlewareOptions {
 interface RequestState {
   rootSpan: Span
   currentIterationSpan: Span | null
-  toolSpans: Map<string, Span>
+  toolSpans: Map<string, { span: Span; toolName: string }>
   iterationCount: number
   assistantTextBuffer: string
   startTime: number
@@ -115,7 +115,6 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
     meter,
     captureContent = false,
     redact = (s) => s,
-    serviceName: _serviceName = 'tanstack-ai',
     spanNameFormatter,
     attributeEnricher,
     onBeforeSpanStart,
@@ -143,6 +142,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           safeCall('otel.spanNameFormatter', () => spanNameFormatter?.(info)) ??
           `chat ${ctx.model}`
         const baseOptions: SpanOptions = {
+          kind: SpanKind.INTERNAL,
           attributes: {
             'gen_ai.system': ctx.provider,
             'gen_ai.operation.name': 'chat',
@@ -212,7 +212,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         if (config.maxTokens !== undefined)
           baseAttrs['gen_ai.request.max_tokens'] = config.maxTokens
 
-        const baseOptions: SpanOptions = { attributes: baseAttrs }
+        const baseOptions: SpanOptions = { kind: SpanKind.CLIENT, attributes: baseAttrs }
         const spanOptions =
           safeCall('otel.onBeforeSpanStart', () =>
             onBeforeSpanStart?.(info, baseOptions),
@@ -348,7 +348,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           'gen_ai.tool.call.id': hookCtx.toolCallId,
           'gen_ai.tool.type': 'function',
         }
-        const baseOptions: SpanOptions = { attributes: baseAttrs }
+        const baseOptions: SpanOptions = { kind: SpanKind.INTERNAL, attributes: baseAttrs }
         const spanOptions =
           safeCall('otel.onBeforeSpanStart', () =>
             onBeforeSpanStart?.(info, baseOptions),
@@ -369,7 +369,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         )
         if (enriched) toolSpan.setAttributes(enriched)
 
-        state.toolSpans.set(hookCtx.toolCallId, toolSpan)
+        state.toolSpans.set(hookCtx.toolCallId, { span: toolSpan, toolName: hookCtx.toolName })
       })
       return undefined
     },
@@ -378,8 +378,9 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
       safeCall('otel.onAfterToolCall', () => {
         const state = stateByCtx.get(ctx)
         if (!state) return
-        const toolSpan = state.toolSpans.get(info.toolCallId)
-        if (!toolSpan) return
+        const entry = state.toolSpans.get(info.toolCallId)
+        if (!entry) return
+        const { span: toolSpan } = entry
 
         const outcome = info.ok ? 'success' : 'error'
         toolSpan.setAttribute('tanstack.ai.tool.outcome', outcome)
@@ -448,9 +449,16 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         }
 
         // Close any open tool spans as errored.
-        for (const [id, span] of state.toolSpans) {
+        for (const [id, entry] of state.toolSpans) {
+          const { span, toolName } = entry
           span.recordException(info.error as Error)
           span.setStatus({ code: SpanStatusCode.ERROR, message })
+          safeCall('otel.onSpanEnd', () =>
+            onSpanEnd?.(
+              { kind: 'tool', ctx, toolCallId: id, toolName, iteration: state.iterationCount - 1 } as OtelSpanInfo<'tool'>,
+              span,
+            ),
+          )
           span.end()
           state.toolSpans.delete(id)
         }
@@ -497,8 +505,15 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           state.currentIterationSpan.end()
           state.currentIterationSpan = null
         }
-        for (const [id, span] of state.toolSpans) {
+        for (const [id, entry] of state.toolSpans) {
+          const { span, toolName } = entry
           closeCancelled(span)
+          safeCall('otel.onSpanEnd', () =>
+            onSpanEnd?.(
+              { kind: 'tool', ctx, toolCallId: id, toolName, iteration: state.iterationCount - 1 } as OtelSpanInfo<'tool'>,
+              span,
+            ),
+          )
           span.end()
           state.toolSpans.delete(id)
         }

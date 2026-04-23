@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SpanStatusCode } from '@opentelemetry/api'
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import { otelMiddleware } from '../../src/middlewares/otel'
 import { EventType } from '../../src/types'
 import { createFakeTracer, createFakeMeter, makeCtx } from './fake-otel'
@@ -14,6 +14,7 @@ describe('otelMiddleware — root span lifecycle', () => {
     expect(spans).toHaveLength(1)
     expect(spans[0]!.name).toBe('chat gpt-4o')
     expect(spans[0]!.ended).toBe(false)
+    expect(spans[0]!.kind).toBe(SpanKind.INTERNAL)
     expect(spans[0]!.attributes['gen_ai.system']).toBe('openai')
     expect(spans[0]!.attributes['gen_ai.operation.name']).toBe('chat')
     expect(spans[0]!.attributes['gen_ai.request.model']).toBe('gpt-4o')
@@ -51,6 +52,7 @@ describe('otelMiddleware — iteration span lifecycle', () => {
     expect(spans).toHaveLength(2)
     expect(iterSpan!.parent).toBe(rootSpan)
     expect(iterSpan!.name).toBe('chat gpt-4o')
+    expect(iterSpan!.kind).toBe(SpanKind.CLIENT)
     expect(iterSpan!.ended).toBe(false)
 
     await mw.onChunk?.(ctx, {
@@ -257,6 +259,7 @@ describe('otelMiddleware — tool spans', () => {
     const toolSpan = spans[2]!
     expect(toolSpan.name).toBe('execute_tool get_weather')
     expect(toolSpan.parent).toBe(iterSpan)
+    expect(toolSpan.kind).toBe(SpanKind.INTERNAL)
     expect(toolSpan.attributes['gen_ai.tool.name']).toBe('get_weather')
     expect(toolSpan.attributes['gen_ai.tool.call.id']).toBe('tc-1')
     expect(toolSpan.attributes['gen_ai.tool.type']).toBe('function')
@@ -435,6 +438,70 @@ describe('otelMiddleware — error and abort paths', () => {
     expect(spans[0]!.status.code).toBe(SpanStatusCode.ERROR)
     expect(spans[0]!.attributes['gen_ai.completion.reason']).toBe('cancelled')
     expect(spans[0]!.ended).toBe(true)
+  })
+
+  it('onError fires onSpanEnd for open tool spans before ending them', async () => {
+    const { tracer } = createFakeTracer()
+    const seen: Array<{ kind: string; toolName?: string; toolCallId?: string; ended: boolean }> = []
+    const mw = otelMiddleware({
+      tracer,
+      onSpanEnd: (info, span) => {
+        seen.push({ kind: info.kind, toolName: info.toolName, toolCallId: info.toolCallId, ended: (span as any).ended })
+      },
+    })
+    const ctx = makeCtx({ hasTools: true })
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+    await mw.onBeforeToolCall?.(ctx, {
+      toolCall: { id: 'tc-err', type: 'function', function: { name: 'my_tool', arguments: '{}' } } as any,
+      tool: undefined,
+      args: {},
+      toolName: 'my_tool',
+      toolCallId: 'tc-err',
+    })
+
+    const err = new Error('fatal')
+    await mw.onError?.(ctx, { error: err, duration: 100 })
+
+    // onSpanEnd should have been called for: iteration, tool, root (in that order)
+    const toolCall = seen.find((s) => s.kind === 'tool')
+    expect(toolCall).toBeDefined()
+    expect(toolCall!.toolName).toBe('my_tool')
+    expect(toolCall!.toolCallId).toBe('tc-err')
+    expect(toolCall!.ended).toBe(false) // fired before span.end()
+  })
+
+  it('onAbort fires onSpanEnd for open tool spans before ending them', async () => {
+    const { tracer } = createFakeTracer()
+    const seen: Array<{ kind: string; toolName?: string; toolCallId?: string; ended: boolean }> = []
+    const mw = otelMiddleware({
+      tracer,
+      onSpanEnd: (info, span) => {
+        seen.push({ kind: info.kind, toolName: info.toolName, toolCallId: info.toolCallId, ended: (span as any).ended })
+      },
+    })
+    const ctx = makeCtx({ hasTools: true })
+
+    await mw.onStart?.(ctx)
+    ctx.phase = 'beforeModel'
+    await mw.onConfig?.(ctx, { messages: [], systemPrompts: [], tools: [] })
+    await mw.onBeforeToolCall?.(ctx, {
+      toolCall: { id: 'tc-abort', type: 'function', function: { name: 'slow_tool', arguments: '{}' } } as any,
+      tool: undefined,
+      args: {},
+      toolName: 'slow_tool',
+      toolCallId: 'tc-abort',
+    })
+
+    await mw.onAbort?.(ctx, { reason: 'user stop', duration: 50 })
+
+    const toolCall = seen.find((s) => s.kind === 'tool')
+    expect(toolCall).toBeDefined()
+    expect(toolCall!.toolName).toBe('slow_tool')
+    expect(toolCall!.toolCallId).toBe('tc-abort')
+    expect(toolCall!.ended).toBe(false) // fired before span.end()
   })
 })
 

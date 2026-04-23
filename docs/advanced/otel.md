@@ -83,7 +83,7 @@ chat gpt-4o           (root, kind: INTERNAL)
 
 Two GenAI-standard histograms, recorded per iteration:
 
-- `gen_ai.client.operation.duration` (seconds) — per-iteration duration
+- `gen_ai.client.operation.duration` (seconds) — duration of the `chat()` operation, including all agent-loop iterations and tool execution
 - `gen_ai.client.token.usage` (tokens) — recorded twice per iteration (input + output) with `gen_ai.token.type` attribute
 
 `gen_ai.response.id` is deliberately excluded from metric attributes to keep cardinality low.
