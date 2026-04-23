@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { chat } from '@tanstack/ai'
+import { resolveDebugOption } from '@tanstack/ai/adapter-internals'
 import { ChatRequest$outboundSchema } from '@openrouter/sdk/models'
 import { createOpenRouterText } from '../src/adapters/text'
 import type { OpenRouterTextModelOptions } from '../src/adapters/text'
 import type { StreamChunk, Tool } from '@tanstack/ai'
+
+// Test helper: a silent logger for test chatStream calls.
+const testLogger = resolveDebugOption(false)
 // Declare mockSend at module level
 let mockSend: any
 
@@ -304,6 +308,7 @@ describe('OpenRouter adapter option mapping', () => {
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'What is the weather in Berlin?' }],
       tools: [weatherTool],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -378,6 +383,7 @@ describe('OpenRouter adapter option mapping', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -434,6 +440,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -481,6 +488,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -539,6 +547,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -630,6 +639,7 @@ describe('OpenRouter AG-UI event emission', () => {
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Weather in Berlin?' }],
       tools: [weatherTool],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -669,6 +679,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -721,6 +732,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -768,6 +780,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -832,6 +845,7 @@ describe('OpenRouter AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/o1-preview',
       messages: [{ role: 'user', content: 'What is the meaning of life?' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -887,6 +901,7 @@ describe('OpenRouter structured output', () => {
       chatOptions: {
         model: 'openai/gpt-4o-mini',
         messages: [{ role: 'user', content: 'Give me a person' }],
+        logger: testLogger,
       },
       outputSchema,
     })
@@ -954,6 +969,7 @@ describe('OpenRouter structured output', () => {
       chatOptions: {
         model: 'openai/gpt-4o-mini',
         messages: [{ role: 'user', content: 'Generate' }],
+        logger: testLogger,
       },
       outputSchema,
     })
@@ -964,8 +980,11 @@ describe('OpenRouter structured output', () => {
     // Root object: all props required, additionalProperties: false
     expect(sentSchema.additionalProperties).toBe(false)
     expect(sentSchema.required).toEqual(['title', 'description', 'tags'])
-    // Optional field is made nullable
+    // Optional primitive is made nullable
     expect(sentSchema.properties.description.type).toEqual(['string', 'null'])
+    // Optional array must also be made nullable (strict mode requires every
+    // required property to be nullable if it was originally optional)
+    expect(sentSchema.properties.tags.type).toEqual(['array', 'null'])
     // Nested array items: same transformation applied recursively
     expect(sentSchema.properties.tags.items.additionalProperties).toBe(false)
     expect(sentSchema.properties.tags.items.required).toEqual([
@@ -976,6 +995,47 @@ describe('OpenRouter structured output', () => {
       'number',
       'null',
     ])
+  })
+
+  it('makes optional nested objects nullable under strict mode', async () => {
+    const nonStreamResponse = {
+      choices: [{ message: { content: '{"id":"x","meta":null}' } }],
+    }
+    setupMockSdkClient([], nonStreamResponse)
+    const adapter = createAdapter()
+
+    const outputSchema = {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        meta: {
+          type: 'object',
+          properties: {
+            createdAt: { type: 'string' },
+          },
+          required: ['createdAt'],
+        },
+      },
+      required: ['id'],
+    }
+
+    await adapter.structuredOutput({
+      chatOptions: {
+        model: 'openai/gpt-4o-mini',
+        messages: [{ role: 'user', content: 'Generate' }],
+        logger: testLogger,
+      },
+      outputSchema,
+    })
+
+    const [rawParams] = mockSend.mock.calls[0]!
+    const sentSchema = rawParams.chatRequest.responseFormat.jsonSchema.schema
+
+    expect(sentSchema.required).toEqual(['id', 'meta'])
+    expect(sentSchema.properties.meta.type).toEqual(['object', 'null'])
+    // Inner object still strict-compatible
+    expect(sentSchema.properties.meta.additionalProperties).toBe(false)
+    expect(sentSchema.properties.meta.required).toEqual(['createdAt'])
   })
 
   it('flows through core chat() entrypoint with strict transformation', async () => {
@@ -1052,6 +1112,7 @@ describe('OpenRouter structured output', () => {
       chatOptions: {
         model: 'openai/gpt-4o-mini',
         messages: [{ role: 'user', content: 'List items' }],
+        logger: testLogger,
       },
       outputSchema: { type: 'object' },
     })
@@ -1078,6 +1139,7 @@ describe('OpenRouter structured output', () => {
         chatOptions: {
           model: 'openai/gpt-4o-mini',
           messages: [{ role: 'user', content: 'Give me data' }],
+          logger: testLogger,
         },
         outputSchema: { type: 'object' },
       }),
@@ -1094,6 +1156,7 @@ describe('OpenRouter structured output', () => {
         chatOptions: {
           model: 'openai/gpt-4o-mini',
           messages: [{ role: 'user', content: 'Give me data' }],
+          logger: testLogger,
         },
         outputSchema: { type: 'object' },
       }),
@@ -1119,6 +1182,7 @@ describe('OpenRouter structured output', () => {
         chatOptions: {
           model: 'openai/gpt-4o-mini',
           messages: [{ role: 'user', content: 'Give me data' }],
+          logger: testLogger,
         },
         outputSchema: { type: 'object' },
       }),
@@ -1318,6 +1382,7 @@ describe('OpenRouter duplicate event prevention', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -1353,6 +1418,7 @@ describe('OpenRouter duplicate event prevention', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -1391,6 +1457,7 @@ describe('OpenRouter duplicate event prevention', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hi' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -1433,6 +1500,7 @@ describe('OpenRouter duplicate event prevention', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -1493,6 +1561,7 @@ describe('OpenRouter STEP event consistency', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/o1-preview',
       messages: [{ role: 'user', content: 'What is the meaning of life?' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -1583,6 +1652,7 @@ describe('OpenRouter STEP event consistency', () => {
     for await (const chunk of adapter.chatStream({
       model: 'openai/o1-preview',
       messages: [{ role: 'user', content: 'What is the meaning of life?' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }

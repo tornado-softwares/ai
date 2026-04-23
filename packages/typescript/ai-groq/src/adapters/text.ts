@@ -10,6 +10,7 @@ import {
 } from '../utils'
 import type {
   GROQ_CHAT_MODELS,
+  GroqChatModelToolCapabilitiesByName,
   ResolveInputModalities,
   ResolveProviderOptions,
 } from '../model-meta'
@@ -17,15 +18,20 @@ import type {
   StructuredOutputOptions,
   StructuredOutputResult,
 } from '@tanstack/ai/adapters'
+import type { InternalLogger } from '@tanstack/ai/adapter-internals'
 import type GROQ_SDK from 'groq-sdk'
 import type { ChatCompletionCreateParamsStreaming } from 'groq-sdk/resources/chat/completions'
 import type {
   ContentPart,
+  Modality,
   ModelMessage,
   StreamChunk,
   TextOptions,
 } from '@tanstack/ai'
-import type { InternalTextProviderOptions } from '../text/text-provider-options'
+import type {
+  ExternalTextProviderOptions,
+  InternalTextProviderOptions,
+} from '../text/text-provider-options'
 import type {
   ChatCompletionContentPart,
   ChatCompletionMessageParam,
@@ -33,6 +39,13 @@ import type {
   GroqMessageMetadataByModality,
 } from '../message-types'
 import type { GroqClientConfig } from '../utils'
+
+type GroqTextProviderOptions = ExternalTextProviderOptions
+
+type ResolveToolCapabilities<TModel extends string> =
+  TModel extends keyof GroqChatModelToolCapabilitiesByName
+    ? NonNullable<GroqChatModelToolCapabilitiesByName[TModel]>
+    : readonly []
 
 /** Cast an event object to StreamChunk. Adapters construct events with string
  *  literal types which are structurally compatible with the EventType enum. */
@@ -57,11 +70,17 @@ export type { ExternalTextProviderOptions as GroqTextProviderOptions } from '../
  */
 export class GroqTextAdapter<
   TModel extends (typeof GROQ_CHAT_MODELS)[number],
+  TProviderOptions extends Record<string, any> = ResolveProviderOptions<TModel>,
+  TInputModalities extends ReadonlyArray<Modality> =
+    ResolveInputModalities<TModel>,
+  TToolCapabilities extends ReadonlyArray<string> =
+    ResolveToolCapabilities<TModel>,
 > extends BaseTextAdapter<
   TModel,
-  ResolveProviderOptions<TModel>,
-  ResolveInputModalities<TModel>,
-  GroqMessageMetadataByModality
+  TProviderOptions,
+  TInputModalities,
+  GroqMessageMetadataByModality,
+  TToolCapabilities
 > {
   readonly kind = 'text' as const
   readonly name = 'groq' as const
@@ -74,10 +93,11 @@ export class GroqTextAdapter<
   }
 
   async *chatStream(
-    options: TextOptions<ResolveProviderOptions<TModel>>,
+    options: TextOptions<GroqTextProviderOptions>,
   ): AsyncIterable<StreamChunk> {
     const requestParams = this.mapTextOptionsToGroq(options)
     const timestamp = Date.now()
+    const { logger } = options
 
     const aguiState = {
       runId: options.runId ?? generateId(this.name),
@@ -88,12 +108,16 @@ export class GroqTextAdapter<
     }
 
     try {
+      logger.request(
+        `activity=chat provider=groq model=${this.model} messages=${options.messages.length} tools=${options.tools?.length ?? 0} stream=true`,
+        { provider: 'groq', model: this.model },
+      )
       const stream = await this.client.chat.completions.create({
         ...requestParams,
         stream: true,
       })
 
-      yield* this.processGroqStreamChunks(stream, options, aguiState)
+      yield* this.processGroqStreamChunks(stream, options, aguiState, logger)
     } catch (error: unknown) {
       const err = error as Error & { code?: string }
 
@@ -121,10 +145,10 @@ export class GroqTextAdapter<
         },
       })
 
-      console.error('>>> chatStream: Fatal error during response creation <<<')
-      console.error('>>> Error message:', err.message)
-      console.error('>>> Error stack:', err.stack)
-      console.error('>>> Full error:', err)
+      logger.errors('groq.chatStream fatal', {
+        error,
+        source: 'groq.chatStream',
+      })
     }
   }
 
@@ -141,10 +165,11 @@ export class GroqTextAdapter<
    * We apply Groq-specific transformations for structured output compatibility.
    */
   async structuredOutput(
-    options: StructuredOutputOptions<ResolveProviderOptions<TModel>>,
+    options: StructuredOutputOptions<GroqTextProviderOptions>,
   ): Promise<StructuredOutputResult<unknown>> {
     const { chatOptions, outputSchema } = options
     const requestParams = this.mapTextOptionsToGroq(chatOptions)
+    const { logger } = chatOptions
 
     const jsonSchema = makeGroqStructuredOutputCompatible(
       outputSchema,
@@ -152,6 +177,10 @@ export class GroqTextAdapter<
     )
 
     try {
+      logger.request(
+        `activity=chat provider=groq model=${this.model} messages=${chatOptions.messages.length} tools=${chatOptions.tools?.length ?? 0} stream=false`,
+        { provider: 'groq', model: this.model },
+      )
       const response = await this.client.chat.completions.create({
         ...requestParams,
         stream: false,
@@ -183,9 +212,10 @@ export class GroqTextAdapter<
         rawText,
       }
     } catch (error: unknown) {
-      const err = error as Error
-      console.error('>>> structuredOutput: Error during response creation <<<')
-      console.error('>>> Error message:', err.message)
+      logger.errors('groq.structuredOutput fatal', {
+        error,
+        source: 'groq.structuredOutput',
+      })
       throw error
     }
   }
@@ -204,6 +234,7 @@ export class GroqTextAdapter<
       timestamp: number
       hasEmittedRunStarted: boolean
     },
+    logger: InternalLogger,
   ): AsyncIterable<StreamChunk> {
     let accumulatedContent = ''
     const timestamp = aguiState.timestamp
@@ -221,6 +252,7 @@ export class GroqTextAdapter<
 
     try {
       for await (const chunk of stream) {
+        logger.provider(`provider=groq`, { chunk })
         const choice = chunk.choices[0]
 
         if (!choice) continue
@@ -383,7 +415,10 @@ export class GroqTextAdapter<
       }
     } catch (error: unknown) {
       const err = error as Error & { code?: string }
-      console.log('[Groq Adapter] Stream ended with error:', err.message)
+      logger.errors('groq stream ended with error', {
+        error,
+        source: 'groq.processGroqStreamChunks',
+      })
 
       yield asChunk({
         type: 'RUN_ERROR',

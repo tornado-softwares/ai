@@ -9,12 +9,14 @@ import {
 import type {
   GEMINI_MODELS,
   GeminiChatModelProviderOptionsByName,
+  GeminiChatModelToolCapabilitiesByName,
   GeminiModelInputModalitiesByName,
 } from '../model-meta'
 import type {
   StructuredOutputOptions,
   StructuredOutputResult,
 } from '@tanstack/ai/adapters'
+import type { InternalLogger } from '@tanstack/ai/adapter-internals'
 import type {
   Content,
   GenerateContentParameters,
@@ -71,6 +73,15 @@ type ResolveInputModalities<TModel extends string> =
     ? GeminiModelInputModalitiesByName[TModel]
     : readonly ['text', 'image', 'audio', 'video', 'document']
 
+/**
+ * Resolve tool capabilities for a specific model.
+ * If the model has explicit tools in the map, use those; otherwise use empty tuple.
+ */
+type ResolveToolCapabilities<TModel extends string> =
+  TModel extends keyof GeminiChatModelToolCapabilitiesByName
+    ? NonNullable<GeminiChatModelToolCapabilitiesByName[TModel]>
+    : readonly []
+
 // ===========================
 // Adapter Implementation
 // ===========================
@@ -83,14 +94,17 @@ type ResolveInputModalities<TModel extends string> =
  */
 export class GeminiTextAdapter<
   TModel extends (typeof GEMINI_MODELS)[number],
-  TProviderOptions extends object = ResolveProviderOptions<TModel>,
+  TProviderOptions extends Record<string, any> = ResolveProviderOptions<TModel>,
   TInputModalities extends ReadonlyArray<Modality> =
     ResolveInputModalities<TModel>,
+  TToolCapabilities extends ReadonlyArray<string> =
+    ResolveToolCapabilities<TModel>,
 > extends BaseTextAdapter<
   TModel,
   TProviderOptions,
   TInputModalities,
-  GeminiMessageMetadataByModality
+  GeminiMessageMetadataByModality,
+  TToolCapabilities
 > {
   readonly kind = 'text' as const
   readonly name = 'gemini' as const
@@ -106,14 +120,23 @@ export class GeminiTextAdapter<
     options: TextOptions<GeminiTextProviderOptions>,
   ): AsyncIterable<StreamChunk> {
     const mappedOptions = this.mapCommonOptionsToGemini(options)
+    const { logger } = options
 
     try {
+      logger.request(
+        `activity=chat provider=gemini model=${this.model} messages=${options.messages.length} tools=${options.tools?.length ?? 0} stream=true`,
+        { provider: 'gemini', model: this.model },
+      )
       const result =
         await this.client.models.generateContentStream(mappedOptions)
 
-      yield* this.processStreamChunks(result, options)
+      yield* this.processStreamChunks(result, options, logger)
     } catch (error) {
       const timestamp = Date.now()
+      logger.errors('gemini.chatStream fatal', {
+        error,
+        source: 'gemini.chatStream',
+      })
       yield asChunk({
         type: 'RUN_ERROR',
         model: options.model,
@@ -141,10 +164,15 @@ export class GeminiTextAdapter<
     options: StructuredOutputOptions<GeminiTextProviderOptions>,
   ): Promise<StructuredOutputResult<unknown>> {
     const { chatOptions, outputSchema } = options
+    const { logger } = chatOptions
 
     const mappedOptions = this.mapCommonOptionsToGemini(chatOptions)
 
     try {
+      logger.request(
+        `activity=chat provider=gemini model=${this.model} messages=${chatOptions.messages.length} tools=${chatOptions.tools?.length ?? 0} stream=false`,
+        { provider: 'gemini', model: this.model },
+      )
       // Add structured output configuration
       const result = await this.client.models.generateContent({
         ...mappedOptions,
@@ -173,6 +201,10 @@ export class GeminiTextAdapter<
         rawText,
       }
     } catch (error) {
+      logger.errors('gemini.structuredOutput fatal', {
+        error,
+        source: 'gemini.structuredOutput',
+      })
       throw new Error(
         error instanceof Error
           ? error.message
@@ -201,6 +233,7 @@ export class GeminiTextAdapter<
   private async *processStreamChunks(
     result: AsyncGenerator<GenerateContentResponse, unknown, unknown>,
     options: TextOptions<GeminiTextProviderOptions>,
+    logger: InternalLogger,
   ): AsyncIterable<StreamChunk> {
     const model = options.model
     const timestamp = Date.now()
@@ -230,6 +263,7 @@ export class GeminiTextAdapter<
     let hasEmittedStepStarted = false
 
     for await (const chunk of result) {
+      logger.provider(`provider=gemini`, { chunk })
       // Emit RUN_STARTED on first chunk
       if (!hasEmittedRunStarted) {
         hasEmittedRunStarted = true
@@ -810,7 +844,8 @@ export function createGeminiChat<TModel extends (typeof GEMINI_MODELS)[number]>(
 ): GeminiTextAdapter<
   TModel,
   ResolveProviderOptions<TModel>,
-  ResolveInputModalities<TModel>
+  ResolveInputModalities<TModel>,
+  ResolveToolCapabilities<TModel>
 > {
   return new GeminiTextAdapter({ apiKey, ...config }, model)
 }
@@ -825,7 +860,8 @@ export function geminiText<TModel extends (typeof GEMINI_MODELS)[number]>(
 ): GeminiTextAdapter<
   TModel,
   ResolveProviderOptions<TModel>,
-  ResolveInputModalities<TModel>
+  ResolveInputModalities<TModel>,
+  ResolveToolCapabilities<TModel>
 > {
   const apiKey = getGeminiApiKeyFromEnv()
   return createGeminiChat(model, apiKey, config)

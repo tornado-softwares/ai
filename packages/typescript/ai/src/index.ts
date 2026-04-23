@@ -64,6 +64,9 @@ export {
 // Tool call management
 export { ToolCallManager } from './activities/chat/tools/tool-calls'
 
+// Provider tool type
+export type { ProviderTool } from './tools/provider-tool'
+
 // Agent loop strategies
 export {
   maxIterations,
@@ -165,3 +168,12 @@ export type {
 // Adapter extension utilities
 export { createModel, extendAdapter } from './extend-adapter'
 export type { ExtendedModelDef } from './extend-adapter'
+
+// Logger
+export type {
+  Logger,
+  DebugCategories,
+  DebugConfig,
+  DebugOption,
+} from './logger/types'
+export { ConsoleLogger } from './logger/console-logger'
