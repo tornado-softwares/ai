@@ -1108,17 +1108,12 @@ describe('connection-adapters', () => {
 
       const getUrl = vi.fn(() => '/api/dynamic')
       const adapter = fetchJSON(getUrl)
-      for await (const _ of adapter.connect([
-        { role: 'user', content: 'x' },
-      ])) {
+      for await (const _ of adapter.connect([{ role: 'user', content: 'x' }])) {
         // drain
       }
 
       expect(getUrl).toHaveBeenCalledOnce()
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/dynamic',
-        expect.any(Object),
-      )
+      expect(fetchMock).toHaveBeenCalledWith('/api/dynamic', expect.any(Object))
     })
 
     it('resolves options-as-async-function at call time', async () => {
@@ -1132,9 +1127,7 @@ describe('connection-adapters', () => {
           }) as const,
       )
       const adapter = fetchJSON('/api/chat', getOptions)
-      for await (const _ of adapter.connect([
-        { role: 'user', content: 'x' },
-      ])) {
+      for await (const _ of adapter.connect([{ role: 'user', content: 'x' }])) {
         // drain
       }
 
@@ -1151,10 +1144,9 @@ describe('connection-adapters', () => {
       fetchMock.mockResolvedValue(jsonOk([]))
 
       const adapter = fetchJSON('/api/chat', { body: { extra: 42 } })
-      for await (const _ of adapter.connect(
-        [{ role: 'user', content: 'x' }],
-        { sessionId: 'sess' },
-      )) {
+      for await (const _ of adapter.connect([{ role: 'user', content: 'x' }], {
+        sessionId: 'sess',
+      })) {
         // drain
       }
 
@@ -1171,9 +1163,7 @@ describe('connection-adapters', () => {
       const customFetch = vi.fn().mockResolvedValue(jsonOk([]))
 
       const adapter = fetchJSON('/api/chat', { fetchClient: customFetch })
-      for await (const _ of adapter.connect([
-        { role: 'user', content: 'x' },
-      ])) {
+      for await (const _ of adapter.connect([{ role: 'user', content: 'x' }])) {
         // drain
       }
 

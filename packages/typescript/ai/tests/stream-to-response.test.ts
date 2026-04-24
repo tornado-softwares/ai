@@ -984,9 +984,7 @@ describe('toJSONResponse', () => {
       }
     }
 
-    await expect(
-      toJSONResponse(slow(), { abortController }),
-    ).rejects.toThrow()
+    await expect(toJSONResponse(slow(), { abortController })).rejects.toThrow()
     // Bounded: should not have pulled an unbounded number of items after abort.
     expect(pulled).toBeLessThan(10)
   })
