@@ -24,7 +24,7 @@ import { chat } from "@tanstack/ai";
 import { openaiText } from "@tanstack/ai-openai";
 
 const stream = chat({
-  adapter: openaiText("gpt-5.2"),
+  adapter: openaiText("gpt-4o"),
   messages,
 });
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   const { messages } = await request.json();
 
   const stream = chat({
-    adapter: openaiText("gpt-5.2"),
+    adapter: openaiText("gpt-4o"),
     messages,
   });
 
@@ -106,7 +106,7 @@ const weatherTool = toolDefinition({
 });
 
 const stream = chat({
-  adapter: openaiText("gpt-5.2"),
+  adapter: openaiText("gpt-4o"),
   messages,
   tools: [weatherTool],
 });
@@ -131,7 +131,7 @@ const searchTool = toolDefinition({
 });
 
 const stream = chat({
-  adapter: openaiText("gpt-5.2"),
+  adapter: openaiText("gpt-4o"),
   messages,
   tools: [weatherTool, searchTool],
 });

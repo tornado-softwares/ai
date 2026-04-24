@@ -894,17 +894,31 @@ export interface TextMessageEndEvent extends AGUITextMessageEndEvent {
  * @typeParam TToolName - Constrained tool name type. Defaults to `string` (untyped).
  *   When the stream is returned from `chat()` with typed tools, this narrows to
  *   the union of tool name literals on both `toolCallName` and the deprecated
- *   `toolName` alias.
+ *   `toolName` alias via the `DistributedToolCallStart` intersection — the base
+ *   interface intentionally keeps `toolCallName` at `string` so the
+ *   `AGUIToolCallStartEvent` parent (which uses a passthrough index signature)
+ *   remains a compatible supertype without triggering `Omit`-induced
+ *   discriminant collapse.
+ *
+ * Note: `TToolName` is preserved on the `toolName` (TanStack-only) field and
+ * appears as a literal in the discriminated `DistributedToolCallStart`
+ * variants of `TypedStreamChunk`. Consumers narrowing through
+ * `TypedStreamChunk` get the literal. Consumers reading a bare
+ * `ToolCallStartEvent<'x'>['toolCallName']` get `string` — use the
+ * distributed variant (via `TypedStreamChunk`) for discriminated narrowing.
  */
-export interface ToolCallStartEvent<TToolName extends string = string>
-  extends Omit<AGUIToolCallStartEvent, 'toolCallName'> {
-  /** Name of the tool being called (from @ag-ui/core spec) */
-  toolCallName: TToolName
+export interface ToolCallStartEvent<
+  TToolName extends string = string,
+> extends AGUIToolCallStartEvent {
   /** Model identifier for multi-model support */
   model?: string
   /**
    * @deprecated Use `toolCallName` instead (from @ag-ui/core spec).
    * Kept for backward compatibility.
+   *
+   * This field carries the `TToolName` literal in typed streams. For
+   * `toolCallName` narrowing, use `TypedStreamChunk` — its
+   * `DistributedToolCallStart` variants intersect an override in.
    */
   toolName: TToolName
   /** Index for parallel tool calls */
@@ -943,13 +957,23 @@ export interface ToolCallEndEvent<
 > extends AGUIToolCallEndEvent {
   /** Model identifier for multi-model support */
   model?: string
-  /** Name of the tool that completed */
+  /**
+   * Name of the tool that completed (from @ag-ui/core spec).
+   *
+   * `AGUIToolCallEndEvent` does not declare `toolCallName`, so re-declaring
+   * it here as optional is safe — it extends the base shape rather than
+   * narrowing an existing field. `DistributedToolCallEnd` intersects an
+   * override to make it required and narrowed to the tool's literal name
+   * in `TypedStreamChunk`.
+   */
   toolCallName?: TToolName
   /**
    * @deprecated Use `toolCallName` instead.
-   * Kept for backward compatibility.
+   * Kept for backward compatibility. Required so that consumers who rely on
+   * the TanStack surface (pre-ag-ui-merge) can continue to read `toolName`
+   * without an `undefined` check — every adapter populates this field.
    */
-  toolName?: TToolName
+  toolName: TToolName
   /** Final parsed input arguments (TanStack AI internal) */
   input?: TInput
   /** Tool execution result (TanStack AI internal) */
@@ -1172,21 +1196,66 @@ export type StreamChunk = AGUIEvent
 // ============================================================================
 
 /**
+ * A provider-specific tool produced by an adapter-package factory
+ * (e.g. `webSearchTool` from `@tanstack/ai-anthropic/tools`).
+ *
+ * The two `~`-prefixed fields are type-only phantom brands — they are never
+ * assigned at runtime. They allow the core type system to match a factory's
+ * output against the selected model's `supports.tools` list and surface a
+ * compile-time error when the combination is unsupported.
+ *
+ * User-defined tools (via `toolDefinition()`) remain plain `Tool` and stay
+ * assignable to any model.
+ *
+ * @template TProvider - Provider identifier (e.g. `'anthropic'`, `'openai'`).
+ * @template TKind - Canonical tool-kind string matching the provider's
+ *   `supports.tools` entries (e.g. `'web_search'`, `'code_execution'`).
+ */
+export interface ProviderTool<
+  TProvider extends string,
+  TKind extends string,
+> extends Tool {
+  readonly '~provider': TProvider
+  readonly '~toolKind': TKind
+}
+
+/**
  * Detect the `any` type. Returns `true` for `any`, `false` for everything else.
  * @internal
  */
 type IsAny<T> = 0 extends 1 & T ? true : false
 
 /**
+ * Partition out provider-specific tools from a tools array. `ProviderTool`
+ * carries opaque provider metadata (e.g. `webSearchTool` from
+ * `@tanstack/ai-anthropic`) and intentionally has a generic `string` name —
+ * if we included it in the discriminated union, it would widen `toolName`
+ * back to `string` and defeat the entire typing exercise.
+ *
+ * @internal
+ */
+type NonProviderTools<TTools extends ReadonlyArray<Tool<any, any, any>>> =
+  Exclude<TTools[number], ProviderTool<string, string>>
+
+/**
  * Check whether the tools array carries typed tool definitions.
- * Returns `false` for empty arrays or arrays with generic `string` names.
+ * Returns `false` for empty arrays or arrays whose only entries are
+ * `ProviderTool`s (which have generic `string` names).
+ *
+ * The partitioning step matters: a user who passes
+ * `[webSearchTool, myTypedTool]` should still get typed narrowing for
+ * `myTypedTool`. Evaluating `string extends TTools[number]['name']` without
+ * filtering provider tools first would always return `false` (because
+ * `ProviderTool`'s `name` is `string`) and silently fall through to the
+ * untyped branch.
+ *
  * @internal
  */
 type HasTypedTools<TTools extends ReadonlyArray<Tool<any, any, any>>> = [
-  TTools[number],
+  NonProviderTools<TTools>,
 ] extends [never]
   ? false
-  : string extends TTools[number]['name']
+  : string extends NonProviderTools<TTools>['name']
     ? false
     : true
 
@@ -1205,32 +1274,54 @@ type SafeToolInput<T> = T extends {
   : unknown
 
 /**
- * Distribute over each tool to create a per-tool `ToolCallStartEvent`.
+ * Distribute over each non-provider tool to create a per-tool
+ * `ToolCallStartEvent`.
+ *
  * This produces a discriminated union — one variant per tool name literal.
+ * We distribute over `NonProviderTools<TTools>` (not `TTools[number]`) so
+ * that provider tools with generic `string` names do not leak into the
+ * union and widen `toolCallName` / `toolName` back to `string`.
+ *
+ * The trailing `& { toolCallName: TName; toolName: TName }` intersection
+ * narrows the base `AGUIToolCallStartEvent['toolCallName']` (declared as
+ * `string`) to the literal name — TypeScript intersects `string & TName`
+ * down to `TName` for literal `TName`.
+ *
+ * The `name` parameter constraint on the inner `extends` picks up any
+ * tool-like shape — including `ServerTool`, `ClientTool`, and the bare
+ * `Tool` definition — because all three expose `name: TName`.
  * @internal
  */
 type DistributedToolCallStart<
   TTools extends ReadonlyArray<Tool<any, any, any>>,
-> = TTools[number] extends infer T
-  ? T extends Tool<any, any, infer TName>
-    ? ToolCallStartEvent<TName> & { toolCallName: TName; toolName: TName }
+> =
+  NonProviderTools<TTools> extends infer T
+    ? T extends { name: infer TName extends string }
+      ? ToolCallStartEvent<TName> & { toolCallName: TName; toolName: TName }
+      : never
     : never
-  : never
 
 /**
- * Distribute over each tool to create a per-tool `ToolCallEndEvent`.
- * Each variant pairs the tool's name literal with its specific input type,
- * enabling discriminated narrowing: checking `toolName === 'x'` narrows `input`.
+ * Distribute over each non-provider tool to create a per-tool
+ * `ToolCallEndEvent`.
  *
- * `toolName`/`toolCallName` are marked required in the distributed variants so
- * that `Extract<..., { toolName: 'x' }>` works for consumers relying on the
- * discriminated-union pattern, even though the base interface keeps them
- * optional for compatibility with the broader AG-UI surface.
+ * Each variant pairs the tool's name literal with its specific input type,
+ * enabling discriminated narrowing: checking `toolName === 'x'` narrows
+ * `input`.
+ *
+ * `toolName`/`toolCallName` are intersected as required in the distributed
+ * variants so that `Extract<..., { toolName: 'x' }>` works for consumers
+ * relying on the discriminated-union pattern, even though the base
+ * interface keeps them optional for compatibility with the broader AG-UI
+ * surface.
+ *
+ * Distribution happens over `NonProviderTools<TTools>` for the same
+ * reason as in `DistributedToolCallStart`.
  * @internal
  */
 type DistributedToolCallEnd<TTools extends ReadonlyArray<Tool<any, any, any>>> =
-  TTools[number] extends infer T
-    ? T extends Tool<any, any, infer TName>
+  NonProviderTools<TTools> extends infer T
+    ? T extends { name: infer TName extends string }
       ? ToolCallEndEvent<TName, SafeToolInput<T>> & {
           toolCallName: TName
           toolName: TName

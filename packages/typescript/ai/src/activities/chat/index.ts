@@ -35,6 +35,7 @@ import type {
   CustomEvent,
   InferSchemaType,
   ModelMessage,
+  ProviderTool,
   RunFinishedEvent,
   SchemaInput,
   StreamChunk,
@@ -55,7 +56,6 @@ import type {
 } from './middleware/types'
 import type { InternalLogger } from '../../logger/internal-logger'
 import type { DebugOption } from '../../logger/types'
-import type { ProviderTool } from '../../tools/provider-tool'
 
 // ===========================
 // Activity Kind
