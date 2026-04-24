@@ -2,7 +2,10 @@ import { makeStructuredOutputCompatible } from '../utils/schema-converter'
 import type { JSONSchema, Tool } from '@tanstack/ai'
 import type OpenAI from 'openai'
 
-export type FunctionTool = OpenAI.Responses.FunctionTool
+export type FunctionToolConfig = OpenAI.Responses.FunctionTool
+
+/** @deprecated Renamed to `FunctionToolConfig`. Will be removed in a future release. */
+export type FunctionTool = FunctionToolConfig
 
 /**
  * Converts a standard Tool to OpenAI FunctionTool format.
@@ -15,7 +18,9 @@ export type FunctionTool = OpenAI.Responses.FunctionTool
  *
  * This enables strict mode for all tools automatically.
  */
-export function convertFunctionToolToAdapterFormat(tool: Tool): FunctionTool {
+export function convertFunctionToolToAdapterFormat(
+  tool: Tool,
+): FunctionToolConfig {
   const inputSchema = (tool.inputSchema ?? {
     type: 'object',
     properties: {},
@@ -35,5 +40,5 @@ export function convertFunctionToolToAdapterFormat(tool: Tool): FunctionTool {
     description: tool.description,
     parameters: jsonSchema,
     strict: true,
-  } satisfies FunctionTool
+  } satisfies FunctionToolConfig
 }

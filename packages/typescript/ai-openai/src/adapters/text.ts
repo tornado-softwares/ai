@@ -6,10 +6,11 @@ import type {
   OPENAI_CHAT_MODELS,
   OpenAIChatModel,
   OpenAIChatModelProviderOptionsByName,
+  OpenAIChatModelToolCapabilitiesByName,
   OpenAIModelInputModalitiesByName,
 } from '../model-meta'
 import type OpenAI_SDK from 'openai'
-import type { TextOptions } from '@tanstack/ai'
+import type { Modality, TextOptions } from '@tanstack/ai'
 import type {
   ExternalTextProviderOptions,
   InternalTextProviderOptions,
@@ -49,6 +50,15 @@ type ResolveInputModalities<TModel extends string> =
     ? OpenAIModelInputModalitiesByName[TModel]
     : readonly ['text', 'image', 'audio']
 
+/**
+ * Resolve tool capabilities for a specific model.
+ * If the model has explicit tools in the map, use those; otherwise use empty tuple.
+ */
+type ResolveToolCapabilities<TModel extends string> =
+  TModel extends keyof OpenAIChatModelToolCapabilitiesByName
+    ? NonNullable<OpenAIChatModelToolCapabilitiesByName[TModel]>
+    : readonly []
+
 // ===========================
 // Adapter Implementation
 // ===========================
@@ -57,15 +67,23 @@ type ResolveInputModalities<TModel extends string> =
  * OpenAI Text (Chat) Adapter
  *
  * Tree-shakeable adapter for OpenAI chat/text completion functionality.
- * Import only what you need for smaller bundle sizes.
+ * Delegates implementation to {@link OpenAICompatibleResponsesTextAdapter} from
+ * `@tanstack/openai-base` and threads OpenAI-specific tool-capability typing
+ * through the 5th generic of the base class.
  */
 export class OpenAITextAdapter<
   TModel extends OpenAIChatModel,
+  TProviderOptions extends Record<string, any> = ResolveProviderOptions<TModel>,
+  TInputModalities extends
+    ReadonlyArray<Modality> = ResolveInputModalities<TModel>,
+  TToolCapabilities extends
+    ReadonlyArray<string> = ResolveToolCapabilities<TModel>,
 > extends OpenAICompatibleResponsesTextAdapter<
   TModel,
-  ResolveProviderOptions<TModel>,
-  ResolveInputModalities<TModel>,
-  OpenAIMessageMetadataByModality
+  TProviderOptions,
+  TInputModalities,
+  OpenAIMessageMetadataByModality,
+  TToolCapabilities
 > {
   readonly kind = 'text' as const
   readonly name = 'openai' as const

@@ -7,8 +7,12 @@ import {
   beforeEach,
   type Mock,
 } from 'vitest'
+import { resolveDebugOption } from '@tanstack/ai/adapter-internals'
 import { createGroqText, groqText } from '../src/adapters/text'
 import type { StreamChunk, Tool } from '@tanstack/ai'
+
+// Test helper: a silent logger for test chatStream calls.
+const testLogger = resolveDebugOption(false)
 
 // Declare mockCreate at module level
 let mockCreate: Mock<(...args: Array<unknown>) => unknown>
@@ -153,6 +157,7 @@ describe('Groq AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -202,6 +207,7 @@ describe('Groq AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -262,6 +268,7 @@ describe('Groq AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -355,6 +362,7 @@ describe('Groq AG-UI event emission', () => {
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Weather in Berlin?' }],
       tools: [weatherTool],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -422,6 +430,7 @@ describe('Groq AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -472,6 +481,7 @@ describe('Groq AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -550,6 +560,7 @@ describe('Groq AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: 'Say hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }

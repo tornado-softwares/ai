@@ -7,15 +7,18 @@ const validateMaxNumResults = (maxNumResults: number | undefined) => {
   }
 }
 
-export type FileSearchTool = OpenAI.Responses.FileSearchTool
+export type FileSearchToolConfig = OpenAI.Responses.FileSearchTool
+
+/** @deprecated Renamed to `FileSearchToolConfig`. Will be removed in a future release. */
+export type FileSearchTool = FileSearchToolConfig
 
 /**
  * Converts a standard Tool to OpenAI FileSearchTool format
  */
 export function convertFileSearchToolToAdapterFormat(
   tool: Tool,
-): OpenAI.Responses.FileSearchTool {
-  const metadata = tool.metadata as OpenAI.Responses.FileSearchTool
+): FileSearchToolConfig {
+  const metadata = tool.metadata as FileSearchToolConfig
   return {
     type: 'file_search',
     vector_store_ids: metadata.vector_store_ids,
@@ -26,11 +29,12 @@ export function convertFileSearchToolToAdapterFormat(
 }
 
 /**
- * Creates a standard Tool from FileSearchTool parameters
+ * Creates a standard Tool from FileSearchTool parameters.
+ *
+ * Validates max_num_results. Base (non-branded) factory; providers that need
+ * branded return types should re-wrap in their own package.
  */
-export function fileSearchTool(
-  toolData: OpenAI.Responses.FileSearchTool,
-): Tool {
+export function fileSearchTool(toolData: FileSearchToolConfig): Tool {
   validateMaxNumResults(toolData.max_num_results)
   return {
     name: 'file_search',
@@ -40,3 +44,5 @@ export function fileSearchTool(
     },
   }
 }
+
+export { validateMaxNumResults }

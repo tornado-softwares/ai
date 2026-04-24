@@ -2,11 +2,21 @@ import { OpenAICompatibleChatCompletionsTextAdapter } from '@tanstack/openai-bas
 import { getGrokApiKeyFromEnv, toCompatibleConfig } from '../utils/client'
 import type {
   GROK_CHAT_MODELS,
+  GrokChatModelToolCapabilitiesByName,
   ResolveInputModalities,
   ResolveProviderOptions,
 } from '../model-meta'
+import type { Modality } from '@tanstack/ai'
 import type { GrokMessageMetadataByModality } from '../message-types'
 import type { GrokClientConfig } from '../utils'
+
+/**
+ * Resolve tool capabilities for a specific Grok model.
+ */
+type ResolveToolCapabilities<TModel extends string> =
+  TModel extends keyof GrokChatModelToolCapabilitiesByName
+    ? NonNullable<GrokChatModelToolCapabilitiesByName[TModel]>
+    : readonly []
 
 /**
  * Configuration for Grok text adapter
@@ -23,14 +33,24 @@ export type { ExternalTextProviderOptions as GrokTextProviderOptions } from '../
  *
  * Tree-shakeable adapter for Grok chat/text completion functionality.
  * Uses OpenAI-compatible Chat Completions API (not Responses API).
+ *
+ * Delegates implementation to {@link OpenAICompatibleChatCompletionsTextAdapter}
+ * from `@tanstack/openai-base` and threads Grok-specific tool-capability typing
+ * through the 5th generic of the base class.
  */
 export class GrokTextAdapter<
   TModel extends (typeof GROK_CHAT_MODELS)[number],
+  TProviderOptions extends Record<string, any> = ResolveProviderOptions<TModel>,
+  TInputModalities extends
+    ReadonlyArray<Modality> = ResolveInputModalities<TModel>,
+  TToolCapabilities extends
+    ReadonlyArray<string> = ResolveToolCapabilities<TModel>,
 > extends OpenAICompatibleChatCompletionsTextAdapter<
   TModel,
-  ResolveProviderOptions<TModel>,
-  ResolveInputModalities<TModel>,
-  GrokMessageMetadataByModality
+  TProviderOptions,
+  TInputModalities,
+  GrokMessageMetadataByModality,
+  TToolCapabilities
 > {
   readonly kind = 'text' as const
   readonly name = 'grok' as const

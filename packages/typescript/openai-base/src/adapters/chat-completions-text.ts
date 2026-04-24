@@ -37,11 +37,13 @@ export class OpenAICompatibleChatCompletionsTextAdapter<
   TInputModalities extends ReadonlyArray<Modality> = ReadonlyArray<Modality>,
   TMessageMetadata extends DefaultMessageMetadataByModality =
     DefaultMessageMetadataByModality,
+  TToolCapabilities extends ReadonlyArray<string> = ReadonlyArray<string>,
 > extends BaseTextAdapter<
   TModel,
   TProviderOptions,
   TInputModalities,
-  TMessageMetadata
+  TMessageMetadata,
+  TToolCapabilities
 > {
   readonly kind = 'text' as const
   readonly name: string

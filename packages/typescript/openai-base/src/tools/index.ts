@@ -1,29 +1,29 @@
-import type { ApplyPatchTool } from './apply-patch-tool'
-import type { CodeInterpreterTool } from './code-interpreter-tool'
-import type { ComputerUseTool } from './computer-use-tool'
-import type { CustomTool } from './custom-tool'
-import type { FileSearchTool } from './file-search-tool'
-import type { FunctionTool } from './function-tool'
-import type { ImageGenerationTool } from './image-generation-tool'
-import type { LocalShellTool } from './local-shell-tool'
-import type { MCPTool } from './mcp-tool'
-import type { ShellTool } from './shell-tool'
-import type { WebSearchPreviewTool } from './web-search-preview-tool'
-import type { WebSearchTool } from './web-search-tool'
+import type { ApplyPatchToolConfig } from './apply-patch-tool'
+import type { CodeInterpreterToolConfig } from './code-interpreter-tool'
+import type { ComputerUseToolConfig } from './computer-use-tool'
+import type { CustomToolConfig } from './custom-tool'
+import type { FileSearchToolConfig } from './file-search-tool'
+import type { FunctionToolConfig } from './function-tool'
+import type { ImageGenerationToolConfig } from './image-generation-tool'
+import type { LocalShellToolConfig } from './local-shell-tool'
+import type { MCPToolConfig } from './mcp-tool'
+import type { ShellToolConfig } from './shell-tool'
+import type { WebSearchPreviewToolConfig } from './web-search-preview-tool'
+import type { WebSearchToolConfig } from './web-search-tool'
 
 export type OpenAITool =
-  | ApplyPatchTool
-  | CodeInterpreterTool
-  | ComputerUseTool
-  | CustomTool
-  | FileSearchTool
-  | FunctionTool
-  | ImageGenerationTool
-  | LocalShellTool
-  | MCPTool
-  | ShellTool
-  | WebSearchPreviewTool
-  | WebSearchTool
+  | ApplyPatchToolConfig
+  | CodeInterpreterToolConfig
+  | ComputerUseToolConfig
+  | CustomToolConfig
+  | FileSearchToolConfig
+  | FunctionToolConfig
+  | ImageGenerationToolConfig
+  | LocalShellToolConfig
+  | MCPToolConfig
+  | ShellToolConfig
+  | WebSearchPreviewToolConfig
+  | WebSearchToolConfig
 
 export * from './apply-patch-tool'
 export * from './code-interpreter-tool'

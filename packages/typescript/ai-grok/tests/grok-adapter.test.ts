@@ -1,8 +1,28 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { resolveDebugOption } from '@tanstack/ai/adapter-internals'
 import { createGrokText, grokText } from '../src/adapters/text'
 import { createGrokImage, grokImage } from '../src/adapters/image'
 import { createGrokSummarize, grokSummarize } from '../src/adapters/summarize'
 import type { StreamChunk, Tool } from '@tanstack/ai'
+
+// Test helper: a silent logger for test chatStream calls.
+const testLogger = resolveDebugOption(false)
+
+// Mock the OpenAI SDK to avoid constructing a real client during adapter
+// instantiation. Tests that need to inspect calls inject their own mock client
+// via `injectMockClient`.
+vi.mock('openai', () => {
+  return {
+    default: class {
+      chat = {
+        completions: {
+          create: vi.fn(),
+        },
+      }
+    },
+  }
+})
+
 
 // Helper to create async iterable from chunks
 function createAsyncIterable<T>(chunks: Array<T>): AsyncIterable<T> {
@@ -188,6 +208,7 @@ describe('Grok AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -235,6 +256,7 @@ describe('Grok AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -293,6 +315,7 @@ describe('Grok AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -384,6 +407,7 @@ describe('Grok AG-UI event emission', () => {
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Weather in Berlin?' }],
       tools: [weatherTool],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -458,6 +482,7 @@ describe('Grok AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -506,6 +531,7 @@ describe('Grok AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
@@ -582,6 +608,7 @@ describe('Grok AG-UI event emission', () => {
     for await (const chunk of adapter.chatStream({
       model: 'grok-3',
       messages: [{ role: 'user', content: 'Say hello' }],
+      logger: testLogger,
     })) {
       chunks.push(chunk)
     }
