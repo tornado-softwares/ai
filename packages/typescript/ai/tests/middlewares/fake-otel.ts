@@ -2,6 +2,8 @@ import type {
   Attributes,
   AttributeValue,
   Context,
+  Histogram,
+  MetricOptions,
   Meter,
   Span,
   SpanContext,
@@ -9,9 +11,9 @@ import type {
   SpanStatus,
   TimeInput,
   Tracer,
-  Histogram,
 } from '@opentelemetry/api'
-import { SpanStatusCode } from '@opentelemetry/api'
+import { SpanStatusCode, trace as otelTrace } from '@opentelemetry/api'
+import type { ChatMiddlewareContext } from '../../src/activities/chat/middleware/types'
 import type { ToolCall } from '../../src/types'
 
 export interface RecordedEvent {
@@ -31,8 +33,8 @@ export interface FakeSpan extends Span {
   startTimeMs: number
   endTimeMs: number | null
   attributes: Record<string, AttributeValue>
-  events: RecordedEvent[]
-  exceptions: RecordedException[]
+  events: Array<RecordedEvent>
+  exceptions: Array<RecordedException>
   status: SpanStatus
   ended: boolean
 }
@@ -41,17 +43,18 @@ export interface HistogramRecord {
   name: string
   value: number
   attributes?: Attributes
+  options?: MetricOptions
 }
 
 export interface FakeMeter {
   meter: Meter
-  records: HistogramRecord[]
+  records: Array<HistogramRecord>
 }
 
 export interface FakeTracer {
   tracer: Tracer
-  spans: FakeSpan[]
-  activeStack: FakeSpan[]
+  spans: Array<FakeSpan>
+  activeStack: Array<FakeSpan>
 }
 
 function makeSpan(
@@ -127,12 +130,22 @@ function makeSpan(
 }
 
 export function createFakeTracer(): FakeTracer {
-  const spans: FakeSpan[] = []
-  const activeStack: FakeSpan[] = []
+  const spans: Array<FakeSpan> = []
+  const activeStack: Array<FakeSpan> = []
 
   const tracer: Tracer = {
-    startSpan(name, options = {}, _ctx?: Context) {
-      const parent = activeStack[activeStack.length - 1] ?? null
+    startSpan(name, options = {}, ctx?: Context) {
+      // Resolve parent in this order:
+      // 1. Explicit `ctx` argument (how `otelMiddleware` passes the parent)
+      // 2. Fallback to the activeStack (for `startActiveSpan` callers)
+      let parent: FakeSpan | null = null
+      if (ctx) {
+        const fromCtx = otelTrace.getSpan(ctx)
+        if (fromCtx && (fromCtx as FakeSpan).startTimeMs !== undefined) {
+          parent = fromCtx as FakeSpan
+        }
+      }
+      if (!parent) parent = activeStack[activeStack.length - 1] ?? null
       const span = makeSpan(name, options, parent)
       spans.push(span)
       return span
@@ -164,13 +177,13 @@ export function createFakeTracer(): FakeTracer {
 }
 
 export function createFakeMeter(): FakeMeter {
-  const records: HistogramRecord[] = []
+  const records: Array<HistogramRecord> = []
 
   const meter: Meter = {
-    createHistogram(name: string): Histogram {
+    createHistogram(name: string, options?: MetricOptions): Histogram {
       return {
         record(value: number, attributes?: Attributes) {
-          records.push({ name, value, attributes })
+          records.push({ name, value, attributes, options })
         },
       }
     },
@@ -226,10 +239,8 @@ export function makeToolCall(
  * otel middleware reads need realistic values; others can be placeholders.
  */
 export function makeCtx(
-  overrides: Partial<
-    import('../../src/activities/chat/middleware/types').ChatMiddlewareContext
-  > = {},
-) {
+  overrides: Partial<ChatMiddlewareContext> = {},
+): ChatMiddlewareContext {
   const base = {
     requestId: 'req-1',
     streamId: 'stream-1',
@@ -256,5 +267,5 @@ export function makeCtx(
   return {
     ...base,
     ...overrides,
-  } as import('../../src/activities/chat/middleware/types').ChatMiddlewareContext
+  } as ChatMiddlewareContext
 }

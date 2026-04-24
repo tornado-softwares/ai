@@ -6,6 +6,7 @@ import {
 } from '@opentelemetry/api'
 import type {
   AttributeValue,
+  Exception,
   Meter,
   Span,
   SpanOptions,
@@ -16,24 +17,79 @@ import type {
   ChatMiddlewareContext,
 } from '../activities/chat/middleware/types'
 
-export type OtelSpanKind = 'chat' | 'iteration' | 'tool'
+/**
+ * Scope (role) of an OTel span emitted by this middleware.
+ *
+ * - `chat` — the root span for a single `chat()` call
+ * - `iteration` — one per agent-loop iteration (one model call)
+ * - `tool` — one per tool execution inside an iteration
+ */
+export type OtelSpanScope = 'chat' | 'iteration' | 'tool'
 
-export interface OtelSpanInfo<TKind extends OtelSpanKind = OtelSpanKind> {
-  kind: TKind
-  ctx: ChatMiddlewareContext
-  toolName?: string
-  toolCallId?: string
-  iteration?: number
-}
+/**
+ * Alias retained for backwards compatibility. Prefer {@link OtelSpanScope}.
+ *
+ * @deprecated Use `OtelSpanScope` instead — the name shadows OTel's built-in
+ * `SpanKind` which is also imported by integrations of this middleware.
+ */
+export type OtelSpanKind = OtelSpanScope
+
+/**
+ * Span metadata passed to `spanNameFormatter`, `attributeEnricher`,
+ * `onBeforeSpanStart`, and `onSpanEnd`. Discriminated by `kind` so that
+ * tool-only fields narrow automatically inside callback bodies.
+ */
+export type OtelSpanInfo<TScope extends OtelSpanScope = OtelSpanScope> =
+  TScope extends 'chat'
+    ? { kind: 'chat'; ctx: ChatMiddlewareContext }
+    : TScope extends 'iteration'
+      ? { kind: 'iteration'; ctx: ChatMiddlewareContext; iteration: number }
+      : TScope extends 'tool'
+        ? {
+            kind: 'tool'
+            ctx: ChatMiddlewareContext
+            iteration: number
+            toolName: string
+            toolCallId: string
+          }
+        : never
 
 export interface OtelMiddlewareOptions {
+  /** OTel `Tracer` used to start root, iteration, and tool spans. */
   tracer: Tracer
+  /**
+   * Optional OTel `Meter`. When provided, the middleware records
+   * `gen_ai.client.operation.duration` and `gen_ai.client.token.usage`
+   * histograms. Omit to disable metrics without disabling tracing.
+   */
   meter?: Meter
+  /**
+   * When `true`, prompt and completion content is attached to iteration spans
+   * as `gen_ai.*.message` / `gen_ai.choice` events. Defaults to `false` so
+   * that PII never lands on a span by accident.
+   */
   captureContent?: boolean
+  /**
+   * Invoked on every captured content string before it lands on a span.
+   * Return a redacted version. If this function throws, the middleware emits
+   * the literal sentinel `"[redaction_failed]"` instead of the original text
+   * — it never falls back to raw content.
+   */
   redact?: (text: string) => string
+  /**
+   * Maximum characters kept in the per-iteration assistant text buffer used
+   * to emit `gen_ai.choice` events. Extra characters are truncated with a
+   * trailing `"…"` marker. Defaults to 100 000. Set to `0` to disable the
+   * cap. Exporters typically truncate long attribute values anyway.
+   */
+  maxContentLength?: number
+  /** Override the default span name for each `kind`. */
   spanNameFormatter?: (info: OtelSpanInfo) => string
+  /** Add extra attributes to each span. */
   attributeEnricher?: (info: OtelSpanInfo) => Record<string, AttributeValue>
+  /** Mutate `SpanOptions` immediately before `tracer.startSpan(...)`. */
   onBeforeSpanStart?: (info: OtelSpanInfo, options: SpanOptions) => SpanOptions
+  /** Fires just before every `span.end()`. */
   onSpanEnd?: (info: OtelSpanInfo, span: Span) => void
 }
 
@@ -43,10 +99,14 @@ interface RequestState {
   toolSpans: Map<string, { span: Span; toolName: string }>
   iterationCount: number
   assistantTextBuffer: string
+  assistantTextBufferTruncated: boolean
   startTime: number
 }
 
 const stateByCtx = new WeakMap<ChatMiddlewareContext, RequestState>()
+
+const DEFAULT_MAX_CONTENT_LENGTH = 100_000
+const REDACTION_FAILED_SENTINEL = '[redaction_failed]'
 
 function serializeContent(content: unknown): string {
   if (typeof content === 'string') return content
@@ -99,12 +159,33 @@ function messageEventName(role: string): string {
   }
 }
 
+function errorMessage(err: unknown): string | undefined {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  if (err && typeof err === 'object' && 'message' in err) {
+    const m = (err as { message?: unknown }).message
+    if (typeof m === 'string') return m
+  }
+  return undefined
+}
+
+function errorTypeName(err: unknown): string {
+  if (err instanceof Error) return err.name || 'Error'
+  if (err && typeof err === 'object' && 'name' in err) {
+    const n = (err as { name?: unknown }).name
+    if (typeof n === 'string') return n
+  }
+  return 'Error'
+}
+
 function safeCall<T>(label: string, fn: () => T): T | undefined {
   try {
     return fn()
   } catch (err) {
-    void err
-    void label
+    // Keep middleware non-fatal, but surface callback failures so that broken
+    // extension points (attributeEnricher, spanNameFormatter, onSpanEnd, ...)
+    // are observable. Matches the guarantee documented in docs/advanced/otel.md.
+    console.warn(`[otelMiddleware] ${label} failed`, err)
     return undefined
   }
 }
@@ -115,6 +196,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
     meter,
     captureContent = false,
     redact = (s) => s,
+    maxContentLength = DEFAULT_MAX_CONTENT_LENGTH,
     spanNameFormatter,
     attributeEnricher,
     onBeforeSpanStart,
@@ -132,6 +214,54 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
     description: 'GenAI client token usage',
     unit: '{token}',
   })
+
+  // Redact user content, failing closed to a sentinel string instead of ever
+  // letting raw text through. Callers that pass `captureContent: true` with a
+  // third-party PII redactor depend on this invariant.
+  const redactContent = (text: string): string => {
+    try {
+      return redact(text)
+    } catch (err) {
+      console.warn('[otelMiddleware] otel.redact failed', err)
+      return REDACTION_FAILED_SENTINEL
+    }
+  }
+
+  const appendAssistantText = (state: RequestState, delta: string): void => {
+    if (maxContentLength > 0) {
+      if (state.assistantTextBufferTruncated) return
+      const remaining = maxContentLength - state.assistantTextBuffer.length
+      if (remaining <= 0) {
+        state.assistantTextBufferTruncated = true
+        state.assistantTextBuffer += '…'
+        return
+      }
+      if (delta.length > remaining) {
+        state.assistantTextBuffer += delta.slice(0, remaining) + '…'
+        state.assistantTextBufferTruncated = true
+        return
+      }
+    }
+    state.assistantTextBuffer += delta
+  }
+
+  const closeIterationSpan = (
+    state: RequestState,
+    ctx: ChatMiddlewareContext,
+  ): void => {
+    if (!state.currentIterationSpan) return
+    const span = state.currentIterationSpan
+    const iteration = state.iterationCount - 1
+    safeCall('otel.onSpanEnd', () =>
+      onSpanEnd?.(
+        { kind: 'iteration', ctx, iteration } as OtelSpanInfo<'iteration'>,
+        span,
+      ),
+    )
+    span.end()
+    state.currentIterationSpan = null
+  }
+
   return {
     name: 'otel',
 
@@ -166,6 +296,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           toolSpans: new Map(),
           iterationCount: 0,
           assistantTextBuffer: '',
+          assistantTextBufferTruncated: false,
           startTime: Date.now(),
         })
       })
@@ -177,18 +308,10 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         const state = stateByCtx.get(ctx)
         if (!state) return
 
-        // Close any previously open iteration span (defensive — shouldn't normally be open
-        // here because onChunk(RUN_FINISHED) closes it, but guard against adapter quirks).
-        if (state.currentIterationSpan) {
-          safeCall('otel.onSpanEnd', () =>
-            onSpanEnd?.(
-              { kind: 'iteration', ctx, iteration: state.iterationCount - 1 },
-              state.currentIterationSpan!,
-            ),
-          )
-          state.currentIterationSpan.end()
-          state.currentIterationSpan = null
-        }
+        // The previous iteration's span stays open through tool execution and
+        // onUsage so that tool spans nest under it and token attributes land
+        // on it. Close it here, just before opening the next iteration.
+        closeIterationSpan(state, ctx)
 
         const info: OtelSpanInfo<'iteration'> = {
           kind: 'iteration',
@@ -197,7 +320,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         }
         const name =
           safeCall('otel.spanNameFormatter', () => spanNameFormatter?.(info)) ??
-          `chat ${ctx.model}`
+          `chat ${ctx.model} #${ctx.iteration}`
 
         const baseAttrs: Record<string, AttributeValue> = {
           'gen_ai.system': ctx.provider,
@@ -221,17 +344,18 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
             onBeforeSpanStart?.(info, baseOptions),
           ) ?? baseOptions
 
-        let iterSpan!: Span
-        otelContext.with(
-          otelTrace.setSpan(otelContext.active(), state.rootSpan),
-          () => {
-            iterSpan = tracer.startSpan(name, spanOptions)
-          },
+        const parentCtx = otelTrace.setSpan(
+          otelContext.active(),
+          state.rootSpan,
         )
-        // Fake-tracer test visibility: explicit parent pointer. In real OTel this is a
-        // no-op field write; the actual parent-child relationship is established via the
-        // active context above.
-        ;(iterSpan as unknown as { parent?: Span }).parent = state.rootSpan
+        let iterSpan!: Span
+        otelContext.with(parentCtx, () => {
+          // Pass the parent context explicitly as the 3rd arg — this is a
+          // real-OTel-compatible way to ensure the span is parented to
+          // `rootSpan` even when the host app has not registered a context
+          // manager (e.g. in tests or minimal setups).
+          iterSpan = tracer.startSpan(name, spanOptions, parentCtx)
+        })
 
         const enriched = safeCall('otel.attributeEnricher', () =>
           attributeEnricher?.(info),
@@ -239,18 +363,20 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         if (enriched) iterSpan.setAttributes(enriched)
 
         state.currentIterationSpan = iterSpan
+        state.assistantTextBuffer = ''
+        state.assistantTextBufferTruncated = false
 
         if (captureContent) {
           for (const sys of config.systemPrompts) {
             iterSpan.addEvent('gen_ai.system.message', {
-              content: safeCall('otel.redact', () => redact(sys)) ?? sys,
+              content: redactContent(sys),
             })
           }
           for (const m of config.messages) {
             const body = serializeContent(m.content)
             if (body.length === 0) continue
             iterSpan.addEvent(messageEventName(m.role), {
-              content: safeCall('otel.redact', () => redact(body)) ?? body,
+              content: redactContent(body),
             })
           }
         }
@@ -266,12 +392,12 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         if (!state) return
 
         if (captureContent && chunk.type === 'TEXT_MESSAGE_CONTENT') {
-          state.assistantTextBuffer += chunk.delta
+          appendAssistantText(state, chunk.delta)
         }
 
         if (chunk.type !== 'RUN_FINISHED') return
-        if (!state.currentIterationSpan) return
         const span = state.currentIterationSpan
+        if (!span) return
 
         if (chunk.finishReason) {
           span.setAttribute('gen_ai.response.finish_reasons', [
@@ -280,24 +406,44 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         }
         if (chunk.model) span.setAttribute('gen_ai.response.model', chunk.model)
 
-        if (captureContent && state.assistantTextBuffer.length > 0) {
-          span.addEvent('gen_ai.choice', {
-            content:
-              safeCall('otel.redact', () =>
-                redact(state.assistantTextBuffer),
-              ) ?? state.assistantTextBuffer,
+        // Capture usage attributes and token-histogram metrics directly from
+        // the chunk. `onUsage` can still fire later (per-provider quirks); its
+        // implementation is additive to what's recorded here so nothing is
+        // lost regardless of ordering.
+        if (chunk.usage) {
+          span.setAttributes({
+            'gen_ai.usage.input_tokens': chunk.usage.promptTokens,
+            'gen_ai.usage.output_tokens': chunk.usage.completionTokens,
           })
-          state.assistantTextBuffer = ''
+          if (tokenHistogram) {
+            const metricAttrs = {
+              'gen_ai.system': ctx.provider,
+              'gen_ai.operation.name': 'chat',
+              'gen_ai.request.model': ctx.model,
+            }
+            tokenHistogram.record(chunk.usage.promptTokens, {
+              ...metricAttrs,
+              'gen_ai.token.type': 'input',
+            })
+            tokenHistogram.record(chunk.usage.completionTokens, {
+              ...metricAttrs,
+              'gen_ai.token.type': 'output',
+            })
+          }
         }
 
-        safeCall('otel.onSpanEnd', () =>
-          onSpanEnd?.(
-            { kind: 'iteration', ctx, iteration: state.iterationCount - 1 },
-            span,
-          ),
-        )
-        span.end()
-        state.currentIterationSpan = null
+        if (captureContent && state.assistantTextBuffer.length > 0) {
+          span.addEvent('gen_ai.choice', {
+            content: redactContent(state.assistantTextBuffer),
+          })
+          state.assistantTextBuffer = ''
+          state.assistantTextBufferTruncated = false
+        }
+
+        // Intentionally leave the iteration span open: tool spans started
+        // after `RUN_FINISHED` (tool_calls finishReason) must nest under it,
+        // and `onUsage` may still fire. The span is closed in `onConfig` when
+        // the next iteration starts, or in `onFinish` / `onError` / `onAbort`.
       })
       return undefined
     },
@@ -305,13 +451,11 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
     onUsage(ctx, usage) {
       safeCall('otel.onUsage', () => {
         const state = stateByCtx.get(ctx)
-        if (!state || !state.currentIterationSpan) return
+        if (!state) return
 
-        state.currentIterationSpan.setAttributes({
-          'gen_ai.usage.input_tokens': usage.promptTokens,
-          'gen_ai.usage.output_tokens': usage.completionTokens,
-        })
-
+        // Always record the token histogram — metrics don't depend on having
+        // an iteration span, and skipping here would drop metric data if an
+        // adapter emits `onUsage` outside the iteration window.
         if (tokenHistogram) {
           const metricAttrs = {
             'gen_ai.system': ctx.provider,
@@ -327,13 +471,20 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
             'gen_ai.token.type': 'output',
           })
         }
+
+        const span = state.currentIterationSpan ?? state.rootSpan
+        span.setAttributes({
+          'gen_ai.usage.input_tokens': usage.promptTokens,
+          'gen_ai.usage.output_tokens': usage.completionTokens,
+        })
       })
     },
 
     onBeforeToolCall(ctx, hookCtx) {
       safeCall('otel.onBeforeToolCall', () => {
         const state = stateByCtx.get(ctx)
-        if (!state || !state.currentIterationSpan) return
+        if (!state) return
+        const parent = state.currentIterationSpan ?? state.rootSpan
 
         const info: OtelSpanInfo<'tool'> = {
           kind: 'tool',
@@ -360,15 +511,11 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
             onBeforeSpanStart?.(info, baseOptions),
           ) ?? baseOptions
 
+        const parentCtx = otelTrace.setSpan(otelContext.active(), parent)
         let toolSpan!: Span
-        otelContext.with(
-          otelTrace.setSpan(otelContext.active(), state.currentIterationSpan),
-          () => {
-            toolSpan = tracer.startSpan(name, spanOptions)
-          },
-        )
-        ;(toolSpan as unknown as { parent?: Span }).parent =
-          state.currentIterationSpan
+        otelContext.with(parentCtx, () => {
+          toolSpan = tracer.startSpan(name, spanOptions, parentCtx)
+        })
 
         const enriched = safeCall('otel.attributeEnricher', () =>
           attributeEnricher?.(info),
@@ -395,10 +542,10 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         toolSpan.setAttribute('tanstack.ai.tool.outcome', outcome)
 
         if (!info.ok && info.error !== undefined) {
-          toolSpan.recordException(info.error as Error)
+          toolSpan.recordException(info.error as Exception)
           toolSpan.setStatus({
             code: SpanStatusCode.ERROR,
-            message: (info.error as Error).message,
+            message: errorMessage(info.error),
           })
         }
 
@@ -408,7 +555,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
               ? info.result
               : JSON.stringify(info.result ?? null)
           state.currentIterationSpan.addEvent('gen_ai.tool.message', {
-            content: safeCall('otel.redact', () => redact(body)) ?? body,
+            content: redactContent(body),
             tool_call_id: info.toolCallId,
           })
         }
@@ -421,7 +568,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
               toolName: info.toolName,
               toolCallId: info.toolCallId,
               iteration: state.iterationCount - 1,
-            },
+            } as OtelSpanInfo<'tool'>,
             toolSpan,
           ),
         )
@@ -435,21 +582,23 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         const state = stateByCtx.get(ctx)
         if (!state) return
 
-        const errType =
-          (info.error as { name?: string } | undefined)?.name ?? 'Error'
-        const message = (info.error as { message?: string } | undefined)
-          ?.message
+        const errType = errorTypeName(info.error)
+        const message = errorMessage(info.error)
+        const exception = info.error as Exception
 
-        // Close iteration span (if open) with ERROR.
         if (state.currentIterationSpan) {
-          state.currentIterationSpan.recordException(info.error as Error)
+          state.currentIterationSpan.recordException(exception)
           state.currentIterationSpan.setStatus({
             code: SpanStatusCode.ERROR,
             message,
           })
           safeCall('otel.onSpanEnd', () =>
             onSpanEnd?.(
-              { kind: 'iteration', ctx, iteration: state.iterationCount - 1 },
+              {
+                kind: 'iteration',
+                ctx,
+                iteration: state.iterationCount - 1,
+              } as OtelSpanInfo<'iteration'>,
               state.currentIterationSpan!,
             ),
           )
@@ -457,10 +606,9 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           state.currentIterationSpan = null
         }
 
-        // Close any open tool spans as errored.
         for (const [id, entry] of state.toolSpans) {
           const { span, toolName } = entry
-          span.recordException(info.error as Error)
+          span.recordException(exception)
           span.setStatus({ code: SpanStatusCode.ERROR, message })
           safeCall('otel.onSpanEnd', () =>
             onSpanEnd?.(
@@ -478,7 +626,7 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           state.toolSpans.delete(id)
         }
 
-        state.rootSpan.recordException(info.error as Error)
+        state.rootSpan.recordException(exception)
         state.rootSpan.setStatus({ code: SpanStatusCode.ERROR, message })
 
         if (durationHistogram) {
@@ -486,7 +634,6 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
             'gen_ai.system': ctx.provider,
             'gen_ai.operation.name': 'chat',
             'gen_ai.request.model': ctx.model,
-            'gen_ai.response.model': ctx.model,
             'error.type': errType,
           })
         }
@@ -499,13 +646,16 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
       })
     },
 
-    onAbort(ctx, _info) {
+    onAbort(ctx, info) {
       safeCall('otel.onAbort', () => {
         const state = stateByCtx.get(ctx)
         if (!state) return
 
-        const closeCancelled = (span: Span) => {
-          span.setAttribute('gen_ai.completion.reason', 'cancelled')
+        const closeCancelled = (span: Span): void => {
+          // `gen_ai.completion.reason` is not part of the GenAI semconv; use a
+          // TanStack-namespaced attribute so downstream exporters don't treat
+          // it as standard. The span status still carries the error code.
+          span.setAttribute('tanstack.ai.completion.reason', 'cancelled')
           span.setStatus({ code: SpanStatusCode.ERROR, message: 'cancelled' })
         }
 
@@ -513,7 +663,11 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           closeCancelled(state.currentIterationSpan)
           safeCall('otel.onSpanEnd', () =>
             onSpanEnd?.(
-              { kind: 'iteration', ctx, iteration: state.iterationCount - 1 },
+              {
+                kind: 'iteration',
+                ctx,
+                iteration: state.iterationCount - 1,
+              } as OtelSpanInfo<'iteration'>,
               state.currentIterationSpan!,
             ),
           )
@@ -539,6 +693,16 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
           state.toolSpans.delete(id)
         }
         closeCancelled(state.rootSpan)
+
+        if (durationHistogram) {
+          durationHistogram.record(info.duration / 1000, {
+            'gen_ai.system': ctx.provider,
+            'gen_ai.operation.name': 'chat',
+            'gen_ai.request.model': ctx.model,
+            'error.type': 'cancelled',
+          })
+        }
+
         safeCall('otel.onSpanEnd', () =>
           onSpanEnd?.({ kind: 'chat', ctx }, state.rootSpan),
         )
@@ -552,24 +716,37 @@ export function otelMiddleware(options: OtelMiddlewareOptions): ChatMiddleware {
         const state = stateByCtx.get(ctx)
         if (!state) return
 
-        // Close a dangling iteration span if RUN_FINISHED never arrived (defensive).
-        if (state.currentIterationSpan) {
+        // Close any tool spans that never received `onAfterToolCall` (adapter
+        // quirk). Done before the iteration span so the hierarchy is closed
+        // in depth-first order.
+        for (const [id, entry] of state.toolSpans) {
+          const { span, toolName } = entry
+          span.setAttribute('tanstack.ai.tool.outcome', 'unknown')
           safeCall('otel.onSpanEnd', () =>
             onSpanEnd?.(
-              { kind: 'iteration', ctx, iteration: state.iterationCount - 1 },
-              state.currentIterationSpan!,
+              {
+                kind: 'tool',
+                ctx,
+                toolCallId: id,
+                toolName,
+                iteration: state.iterationCount - 1,
+              } as OtelSpanInfo<'tool'>,
+              span,
             ),
           )
-          state.currentIterationSpan.end()
-          state.currentIterationSpan = null
+          span.end()
+          state.toolSpans.delete(id)
         }
+
+        // The final iteration's span is still open because we keep it open
+        // through tool execution and `onUsage`. Close it now.
+        closeIterationSpan(state, ctx)
 
         if (durationHistogram) {
           durationHistogram.record(info.duration / 1000, {
             'gen_ai.system': ctx.provider,
             'gen_ai.operation.name': 'chat',
             'gen_ai.request.model': ctx.model,
-            'gen_ai.response.model': ctx.model,
           })
         }
 

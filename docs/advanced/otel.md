@@ -20,15 +20,15 @@ The `otelMiddleware` factory wires TanStack AI into your existing OpenTelemetry 
 
 Install `@opentelemetry/api` — it's an optional peer dependency of `@tanstack/ai`:
 
-```
+```bash
 pnpm add @opentelemetry/api
 ```
 
-Wire up your OTel SDK however you already do (e.g. `@opentelemetry/sdk-node`). Then pass a `Tracer` (and optionally a `Meter`) into the middleware:
+Wire up your OTel SDK however you already do (e.g. `@opentelemetry/sdk-node`). Then pass a `Tracer` (and optionally a `Meter`) into the middleware. The OTel middleware lives on its own subpath — importing it never affects users who don't need OTel:
 
 ```ts
 import { chat } from '@tanstack/ai'
-import { otelMiddleware } from '@tanstack/ai/middlewares'
+import { otelMiddleware } from '@tanstack/ai/middlewares/otel'
 import { openaiText } from '@tanstack/ai-openai/adapters'
 import { trace, metrics } from '@opentelemetry/api'
 
@@ -49,13 +49,15 @@ const result = await chat({
 
 ### Spans
 
-```
-chat gpt-4o           (root, kind: INTERNAL)
-├── chat gpt-4o       (iteration, kind: CLIENT)
-│   └── execute_tool get_weather
+```text
+chat gpt-4o              (root, kind: INTERNAL)
+├── chat gpt-4o #0       (iteration, kind: CLIENT)
+│   ├── execute_tool get_weather
 │   └── execute_tool get_time
-└── chat gpt-4o       (iteration, kind: CLIENT)
+└── chat gpt-4o #1       (iteration, kind: CLIENT)
 ```
+
+Iteration spans are numbered (`#0`, `#1`, ...) so distinct iterations of the same chat are easy to pick apart in trace viewers.
 
 ### Attribute reference
 
@@ -81,12 +83,12 @@ chat gpt-4o           (root, kind: INTERNAL)
 
 ### Metrics
 
-Two GenAI-standard histograms, recorded per iteration:
+Two GenAI-standard histograms:
 
-- `gen_ai.client.operation.duration` (seconds) — duration of the `chat()` operation, including all agent-loop iterations and tool execution
-- `gen_ai.client.token.usage` (tokens) — recorded twice per iteration (input + output) with `gen_ai.token.type` attribute
+- `gen_ai.client.operation.duration` (seconds) — recorded **once per `chat()` call**, covering all agent-loop iterations and tool execution. On error or abort the record carries an `error.type` attribute (the thrown error's `name`, or `"cancelled"` for aborts).
+- `gen_ai.client.token.usage` (tokens) — recorded **once per iteration** (two records: input and output), tagged with `gen_ai.token.type`.
 
-`gen_ai.response.id` is deliberately excluded from metric attributes to keep cardinality low.
+Both `gen_ai.response.id` and `gen_ai.response.model` are deliberately excluded from metric attributes to keep cardinality low (per-request custom-model names and request IDs would blow up the series set).
 
 ## Privacy: capturing prompts and completions
 
@@ -104,7 +106,13 @@ otelMiddleware({
 })
 ```
 
+If `redact` throws, the middleware writes the literal sentinel `"[redaction_failed]"` into the span event and logs a warning — it never falls back to the raw content. This is the load-bearing invariant for users who ship traces to third-party backends: a broken redactor should shut off capture, not leak prompts.
+
+Accumulated assistant text (the `gen_ai.choice` event) is capped at `maxContentLength` characters (default `100 000`); longer completions are truncated with a trailing `"…"` marker.
+
 Multimodal content (images, audio, video, documents) is represented as placeholder strings (`[image]`, `[audio]`, ...) to preserve message order without dumping binary data onto spans. Use `onSpanEnd` if you need richer multimodal capture.
+
+Prompt/system/user message events fire from `onConfig` at the start of every iteration, which means the full conversation history (as the adapter will re-send it) is re-emitted on each iteration span. This mirrors what the provider actually sees on the wire.
 
 ## Extension points
 

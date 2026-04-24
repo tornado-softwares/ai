@@ -25,6 +25,10 @@
       "types": "./dist/esm/middlewares/index.d.ts",
       "import": "./dist/esm/middlewares/index.js"
     },
+    "./middlewares/otel": {
+      "types": "./dist/esm/middlewares/otel.d.ts",
+      "import": "./dist/esm/middlewares/otel.js"
+    },
     "./adapter-internals": {
       "types": "./dist/esm/adapter-internals.d.ts",
       "import": "./dist/esm/adapter-internals.js"

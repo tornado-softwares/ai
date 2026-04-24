@@ -12,9 +12,7 @@ export {
   type ContentFilteredInfo,
 } from './content-guard'
 
-export {
-  otelMiddleware,
-  type OtelMiddlewareOptions,
-  type OtelSpanInfo,
-  type OtelSpanKind,
-} from './otel'
+// otelMiddleware is exported from the dedicated subpath
+// `@tanstack/ai/middlewares/otel` so that importing the main middlewares barrel
+// does not eagerly require `@opentelemetry/api` (which is an optional peer
+// dependency).
