@@ -2,6 +2,27 @@ import { AGUIError, RunAgentInputSchema } from '@ag-ui/core'
 import type { Context as AGUIContext } from '@ag-ui/core'
 import type { JSONSchema, ModelMessage, Tool, UIMessage } from '../types'
 
+const KNOWN_PART_TYPES = new Set([
+  'text',
+  'image',
+  'audio',
+  'video',
+  'document',
+  'tool-call',
+  'tool-result',
+  'thinking',
+])
+
+function isValidParts(value: unknown): value is Array<{ type: string }> {
+  if (!Array.isArray(value)) return false
+  for (const p of value) {
+    if (!p || typeof p !== 'object') return false
+    const type = (p as { type?: unknown }).type
+    if (typeof type !== 'string' || !KNOWN_PART_TYPES.has(type)) return false
+  }
+  return true
+}
+
 /**
  * Parse and validate an HTTP request body as an AG-UI `RunAgentInput`.
  *
@@ -44,7 +65,7 @@ export function chatParamsFromRequestBody(body: unknown): Promise<{
   const rawMessages = (body as { messages?: Array<Record<string, unknown>> }).messages ?? []
   const messages = parsed.messages.map((m, i) => {
     const raw = rawMessages[i]
-    if (raw && typeof raw === 'object' && 'parts' in raw) {
+    if (raw && typeof raw === 'object' && 'parts' in raw && isValidParts(raw.parts)) {
       return { ...m, parts: raw.parts } as UIMessage | ModelMessage
     }
     return m as ModelMessage

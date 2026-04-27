@@ -266,9 +266,11 @@ Source: docs/protocol/chunk-definitions.md
 
 ## Tension
 
-HIGH Tension: AG-UI protocol compliance vs. internal message format -- TanStack
-AI's `UIMessage` format (parts-based) diverges from AG-UI spec (content-based).
-Full compliance would require a different message structure.
+RESOLVED: TanStack AI is fully AG-UI compliant on both axes (server→client events
+AND client→server `RunAgentInput`). The wire format carries TanStack `UIMessage`
+anchors with their parts intact alongside AG-UI fan-out messages, so strict AG-UI
+servers see role-based messages while TanStack-aware servers read parts directly
+without transformation. See `docs/migration/ag-ui-compliance.md` for details.
 
 ## Cross-References
 
