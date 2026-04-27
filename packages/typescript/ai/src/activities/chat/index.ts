@@ -45,6 +45,7 @@ import type {
   ToolCallArgsEvent,
   ToolCallEndEvent,
   ToolCallStartEvent,
+  UIMessage,
 } from '../../types'
 import type {
   ChatMiddleware,
@@ -82,12 +83,21 @@ export interface TextActivityOptions<
 > {
   /** The text adapter to use (created by a provider function like openaiText('gpt-4o')) */
   adapter: TAdapter
-  /** Conversation messages - content types are constrained by the adapter's input modalities and metadata */
+  /**
+   * Conversation messages. Accepts:
+   * - `ConstrainedModelMessage` — content types constrained by the adapter's input modalities.
+   * - `ModelMessage` — unconstrained model message (e.g., forwarded from an AG-UI wire payload).
+   * - `UIMessage` — parts-based UI representation; converted internally via `convertMessagesToModelMessages`.
+   *
+   * The three shapes can be mixed in a single array (e.g., when forwarding a wire payload that includes both anchor UIMessages and AG-UI fan-out ModelMessages).
+   */
   messages?: Array<
-    ConstrainedModelMessage<{
-      inputModalities: TAdapter['~types']['inputModalities']
-      messageMetadataByModality: TAdapter['~types']['messageMetadataByModality']
-    }>
+    | UIMessage
+    | ModelMessage
+    | ConstrainedModelMessage<{
+        inputModalities: TAdapter['~types']['inputModalities']
+        messageMetadataByModality: TAdapter['~types']['messageMetadataByModality']
+      }>
   >
   /** System prompts to prepend to the conversation */
   systemPrompts?: TextOptions['systemPrompts']
