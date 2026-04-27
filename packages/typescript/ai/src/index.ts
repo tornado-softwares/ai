@@ -174,6 +174,10 @@ export {
   mergeAgentTools,
 } from './utilities/chat-params'
 
+// AG-UI wire serialization (used internally by @tanstack/ai-client)
+export { uiMessagesToWire } from './utilities/ag-ui-wire'
+export type { WireMessage } from './utilities/ag-ui-wire'
+
 // Adapter extension utilities
 export { createModel, extendAdapter } from './extend-adapter'
 export type { ExtendedModelDef } from './extend-adapter'

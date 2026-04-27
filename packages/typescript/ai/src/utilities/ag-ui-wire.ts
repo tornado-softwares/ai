@@ -52,10 +52,14 @@ export function uiMessagesToWire(
   const wire: Array<WireMessage> = []
 
   for (const msg of messages) {
+    // Defensive: if parts is missing (ModelMessage-shaped input), pass through as-is.
+    // UIMessage always has parts; ModelMessage uses content directly.
+    const parts: ReadonlyArray<MessagePart> = (msg.parts as ReadonlyArray<MessagePart> | undefined) ?? []
+
     if (msg.role === 'system') {
       wire.push({
         ...msg,
-        content: collectText(msg.parts),
+        content: parts.length > 0 ? collectText(parts) : (msg as unknown as { content?: string }).content ?? '',
       })
       continue
     }
@@ -63,13 +67,13 @@ export function uiMessagesToWire(
     if (msg.role === 'user') {
       wire.push({
         ...msg,
-        content: collectUserContent(msg.parts),
+        content: parts.length > 0 ? collectUserContent(parts) : (msg as unknown as { content?: string }).content ?? '',
       })
       continue
     }
 
     // assistant: emit reasoning fan-outs first, then anchor, then tool fan-outs
-    for (const part of msg.parts) {
+    for (const part of parts) {
       if (part.type === 'thinking') {
         wire.push({
           role: 'reasoning',
@@ -79,15 +83,15 @@ export function uiMessagesToWire(
       }
     }
 
-    const text = collectText(msg.parts)
-    const toolCalls = collectToolCalls(msg.parts)
+    const text = collectText(parts)
+    const toolCalls = collectToolCalls(parts)
     wire.push({
       ...msg,
       ...(text !== '' && { content: text }),
       ...(toolCalls && { toolCalls }),
     })
 
-    for (const part of msg.parts) {
+    for (const part of parts) {
       if (part.type === 'tool-result') {
         wire.push({
           role: 'tool',
