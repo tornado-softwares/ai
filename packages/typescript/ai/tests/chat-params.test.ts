@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chatParamsFromRequestBody } from '../src/utilities/chat-params'
+import { chatParamsFromRequestBody, mergeAgentTools } from '../src/utilities/chat-params'
 
 describe('chatParamsFromRequestBody', () => {
   const validBody = {
@@ -58,5 +58,55 @@ describe('chatParamsFromRequestBody', () => {
     await expect(chatParamsFromRequestBody(oldBody)).rejects.toThrow(
       /AG-UI|RunAgentInput|migration/i,
     )
+  })
+})
+
+describe('mergeAgentTools', () => {
+  const fakeServerTool = (name: string) => ({
+    name,
+    description: `server ${name}`,
+    inputSchema: { type: 'object', properties: {} },
+    execute: async () => ({ ok: true }),
+  })
+
+  it('returns server tools unchanged when client list is empty', () => {
+    const server = { greet: fakeServerTool('greet') }
+    const result = mergeAgentTools(server, [])
+    expect(Object.keys(result)).toEqual(['greet'])
+    expect(result['greet']!.execute).toBeDefined()
+  })
+
+  it('adds client-only tools as no-execute stubs', () => {
+    const server = {}
+    const client = [
+      {
+        name: 'showToast',
+        description: 'render a toast',
+        parameters: { type: 'object', properties: {} },
+      },
+    ]
+    const result = mergeAgentTools(server, client)
+    expect(Object.keys(result)).toEqual(['showToast'])
+    expect(result['showToast']!.execute).toBeUndefined()
+    expect(result['showToast']!.inputSchema).toEqual({ type: 'object', properties: {} })
+    expect(result['showToast']!.description).toBe('render a toast')
+  })
+
+  it('server wins on name collision (client declaration ignored)', () => {
+    const server = { greet: fakeServerTool('greet') }
+    const client = [
+      {
+        name: 'greet',
+        description: 'overridden',
+        parameters: { type: 'object', properties: { foo: { type: 'string' } } },
+      },
+    ]
+    const result = mergeAgentTools(server, client)
+    expect(result['greet']!.description).toBe('server greet')
+    expect(result['greet']!.execute).toBeDefined()
+  })
+
+  it('handles empty server and empty client', () => {
+    expect(mergeAgentTools({}, [])).toEqual({})
   })
 })

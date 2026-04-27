@@ -1,6 +1,6 @@
 import { AGUIError, RunAgentInputSchema } from '@ag-ui/core'
 import type { Context as AGUIContext } from '@ag-ui/core'
-import type { JSONSchema, ModelMessage, UIMessage } from '../types'
+import type { JSONSchema, ModelMessage, Tool, UIMessage } from '../types'
 
 /**
  * Parse and validate an HTTP request body as an AG-UI `RunAgentInput`.
@@ -64,4 +64,50 @@ export function chatParamsFromRequestBody(body: unknown): Promise<{
     state: parsed.state,
     context: parsed.context,
   })
+}
+
+/**
+ * Merge a server-side tool registry with the AG-UI client-declared tools
+ * received in the request body.
+ *
+ * Rules:
+ * - Server tools win on name collision. The client's declaration is
+ *   ignored if the server already has a tool with that name. The client's
+ *   UI-side handler still fires when the streamed tool-result event comes
+ *   through (see `chat-client.ts` `onToolCall`), giving the
+ *   "after server execution the client also handles" semantic for free.
+ * - Client-only tools (name not in `serverTools`) become no-execute
+ *   entries: the runtime's existing `ClientToolRequest` path handles
+ *   them — server emits a tool-call request, client executes via its
+ *   registered handler, client posts back the result.
+ *
+ * @param serverTools - The server's `toolDefinition().server(...)` registry,
+ *   keyed by tool name.
+ * @param clientTools - The `tools` array received from
+ *   `chatParamsFromRequestBody(...)`.
+ * @returns A merged record suitable for `chat({ tools })`.
+ */
+export function mergeAgentTools(
+  serverTools: Record<string, Tool>,
+  clientTools: Array<{
+    name: string
+    description: string
+    parameters: JSONSchema
+  }>,
+): Record<string, Tool> {
+  const merged: Record<string, Tool> = { ...serverTools }
+  for (const ct of clientTools) {
+    if (ct.name in merged) {
+      // Server wins
+      continue
+    }
+    merged[ct.name] = {
+      name: ct.name,
+      description: ct.description,
+      inputSchema: ct.parameters,
+      // No `execute` — runtime treats this as a client-side tool and
+      // emits ClientToolRequest events.
+    } as Tool
+  }
+  return merged
 }
