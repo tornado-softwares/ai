@@ -46,7 +46,11 @@ describe('convertMessagesToModelMessages — AG-UI dedup pre-pass', () => {
         role: 'assistant',
         content: 'calling',
         toolCalls: [
-          { id: 'tc1', type: 'function', function: { name: 'getTodos', arguments: '{}' } },
+          {
+            id: 'tc1',
+            type: 'function',
+            function: { name: 'getTodos', arguments: '{}' },
+          },
         ],
       } as ModelMessage,
       { role: 'tool', toolCallId: 'tc1', content: '[]' } as ModelMessage,
@@ -83,7 +87,10 @@ describe('convertMessagesToModelMessages — AG-UI dedup pre-pass', () => {
 
   it('collapses AG-UI developer messages to system role', () => {
     const messages = [
-      { role: 'developer', content: 'You are helpful' } as unknown as ModelMessage,
+      {
+        role: 'developer',
+        content: 'You are helpful',
+      } as unknown as ModelMessage,
       { role: 'user', content: 'hi' } as ModelMessage,
     ]
 

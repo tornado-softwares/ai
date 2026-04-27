@@ -5,7 +5,11 @@ import type { UIMessage } from '../src/types'
 describe('uiMessagesToWire', () => {
   it('mirrors a system UIMessage to a string content field', () => {
     const messages: Array<UIMessage> = [
-      { id: 's1', role: 'system', parts: [{ type: 'text', content: 'You are helpful' }] },
+      {
+        id: 's1',
+        role: 'system',
+        parts: [{ type: 'text', content: 'You are helpful' }],
+      },
     ]
     const wire = uiMessagesToWire(messages)
     expect(wire).toHaveLength(1)
@@ -35,7 +39,11 @@ describe('uiMessagesToWire', () => {
           { type: 'text', content: 'look at this' },
           {
             type: 'image',
-            source: { type: 'url', value: 'https://example.com/cat.png', mimeType: 'image/png' },
+            source: {
+              type: 'url',
+              value: 'https://example.com/cat.png',
+              mimeType: 'image/png',
+            },
           },
         ],
       },
@@ -44,10 +52,17 @@ describe('uiMessagesToWire', () => {
     expect(wire).toHaveLength(1)
     expect(Array.isArray((wire[0]! as any).content)).toBe(true)
     expect((wire[0]! as any).content).toHaveLength(2)
-    expect((wire[0]! as any).content[0]).toEqual({ type: 'text', text: 'look at this' })
+    expect((wire[0]! as any).content[0]).toEqual({
+      type: 'text',
+      text: 'look at this',
+    })
     expect((wire[0]! as any).content[1]).toMatchObject({
       type: 'image',
-      source: { type: 'url', value: 'https://example.com/cat.png', mimeType: 'image/png' },
+      source: {
+        type: 'url',
+        value: 'https://example.com/cat.png',
+        mimeType: 'image/png',
+      },
     })
   })
 
@@ -58,8 +73,19 @@ describe('uiMessagesToWire', () => {
         role: 'assistant',
         parts: [
           { type: 'text', content: 'ok' },
-          { type: 'tool-call', id: 'tc1', name: 'getTodos', arguments: '{}', state: 'input-complete' },
-          { type: 'tool-result', toolCallId: 'tc1', content: '[]', state: 'complete' },
+          {
+            type: 'tool-call',
+            id: 'tc1',
+            name: 'getTodos',
+            arguments: '{}',
+            state: 'input-complete',
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'tc1',
+            content: '[]',
+            state: 'complete',
+          },
         ],
       },
     ]
@@ -71,7 +97,11 @@ describe('uiMessagesToWire', () => {
       role: 'assistant',
       content: 'ok',
       toolCalls: [
-        { id: 'tc1', type: 'function', function: { name: 'getTodos', arguments: '{}' } },
+        {
+          id: 'tc1',
+          type: 'function',
+          function: { name: 'getTodos', arguments: '{}' },
+        },
       ],
     })
     // Fan-out tool message
@@ -96,7 +126,11 @@ describe('uiMessagesToWire', () => {
     const wire = uiMessagesToWire(messages)
     expect(wire).toHaveLength(2)
     expect(wire[0]!).toMatchObject({ role: 'reasoning', content: 'pondering' })
-    expect(wire[1]!).toMatchObject({ id: 'a1', role: 'assistant', content: 'answer' })
+    expect(wire[1]!).toMatchObject({
+      id: 'a1',
+      role: 'assistant',
+      content: 'answer',
+    })
   })
 
   it('preserves the original `parts` array on every anchor message', () => {
@@ -122,7 +156,7 @@ describe('uiMessagesToWire', () => {
       },
     ]
     const wire = uiMessagesToWire(messages)
-    const partOnAnchor = ((wire[0]! as any).parts)[0]
+    const partOnAnchor = (wire[0]! as any).parts[0]
     expect(partOnAnchor.metadata).toEqual({ detail: 'high' })
   })
 })

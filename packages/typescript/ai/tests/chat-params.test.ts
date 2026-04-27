@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { chatParamsFromRequestBody, mergeAgentTools } from '../src/utilities/chat-params'
+import {
+  chatParamsFromRequestBody,
+  mergeAgentTools,
+} from '../src/utilities/chat-params'
 
 describe('chatParamsFromRequestBody', () => {
   const validBody = {
@@ -52,7 +55,9 @@ describe('chatParamsFromRequestBody', () => {
 
   it('rejects the legacy {messages, data} shape with a migration-pointing error', async () => {
     const oldBody = {
-      messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', content: 'hi' }] }],
+      messages: [
+        { id: 'm1', role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+      ],
       data: {},
     }
     await expect(chatParamsFromRequestBody(oldBody)).rejects.toThrow(
@@ -88,7 +93,10 @@ describe('mergeAgentTools', () => {
     const result = mergeAgentTools(server, client)
     expect(Object.keys(result)).toEqual(['showToast'])
     expect(result['showToast']!.execute).toBeUndefined()
-    expect(result['showToast']!.inputSchema).toEqual({ type: 'object', properties: {} })
+    expect(result['showToast']!.inputSchema).toEqual({
+      type: 'object',
+      properties: {},
+    })
     expect(result['showToast']!.description).toBe('render a toast')
   })
 

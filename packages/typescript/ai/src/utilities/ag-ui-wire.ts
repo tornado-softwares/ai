@@ -1,9 +1,4 @@
-import type {
-  ContentPart,
-  MessagePart,
-  TextPart,
-  UIMessage,
-} from '../types'
+import type { ContentPart, MessagePart, TextPart, UIMessage } from '../types'
 
 type AGUITextInputContent = { type: 'text'; text: string }
 type AGUIInputContent =
@@ -35,7 +30,10 @@ type WireAnchorMessage = UIMessage & {
   toolCalls?: Array<AGUIToolCallMirror>
 }
 
-export type WireMessage = WireAnchorMessage | AGUIToolMessage | AGUIReasoningMessage
+export type WireMessage =
+  | WireAnchorMessage
+  | AGUIToolMessage
+  | AGUIReasoningMessage
 
 /**
  * Serialize TanStack `UIMessage`s into the AG-UI `RunAgentInput.messages`
@@ -54,12 +52,16 @@ export function uiMessagesToWire(
   for (const msg of messages) {
     // Defensive: if parts is missing (ModelMessage-shaped input), pass through as-is.
     // UIMessage always has parts; ModelMessage uses content directly.
-    const parts: ReadonlyArray<MessagePart> = (msg.parts as ReadonlyArray<MessagePart> | undefined) ?? []
+    const parts: ReadonlyArray<MessagePart> =
+      (msg.parts as ReadonlyArray<MessagePart> | undefined) ?? []
 
     if (msg.role === 'system') {
       wire.push({
         ...msg,
-        content: parts.length > 0 ? collectText(parts) : (msg as unknown as { content?: string }).content ?? '',
+        content:
+          parts.length > 0
+            ? collectText(parts)
+            : ((msg as unknown as { content?: string }).content ?? ''),
       })
       continue
     }
@@ -67,7 +69,10 @@ export function uiMessagesToWire(
     if (msg.role === 'user') {
       wire.push({
         ...msg,
-        content: parts.length > 0 ? collectUserContent(parts) : (msg as unknown as { content?: string }).content ?? '',
+        content:
+          parts.length > 0
+            ? collectUserContent(parts)
+            : ((msg as unknown as { content?: string }).content ?? ''),
       })
       continue
     }

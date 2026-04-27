@@ -37,8 +37,7 @@ export const Route = createFileRoute('/api/chat')({
         const feature: Feature = (
           typeof fp.feature === 'string' ? fp.feature : 'chat'
         ) as Feature
-        const testId =
-          typeof fp.testId === 'string' ? fp.testId : undefined
+        const testId = typeof fp.testId === 'string' ? fp.testId : undefined
         const aimockPort =
           fp.aimockPort != null ? Number(fp.aimockPort) : undefined
 

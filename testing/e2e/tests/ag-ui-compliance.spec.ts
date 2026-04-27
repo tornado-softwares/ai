@@ -51,7 +51,8 @@ test.describe('AG-UI client-to-server compliance', () => {
 
     // Anchor messages carry `parts` (re-attached by chatParamsFromRequestBody)
     const anchors = second.messages.filter(
-      (m: any) => m.role === 'user' || m.role === 'system' || m.role === 'assistant',
+      (m: any) =>
+        m.role === 'user' || m.role === 'system' || m.role === 'assistant',
     )
     expect(anchors.length).toBeGreaterThan(0)
     for (const a of anchors) {

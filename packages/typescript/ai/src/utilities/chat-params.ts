@@ -62,10 +62,16 @@ export function chatParamsFromRequestBody(body: unknown): Promise<{
   // AG-UI Zod uses `.strip()` so extra fields like `parts` on messages are
   // dropped during parse. We re-attach them from the original body so the
   // existing UIMessage path inside `chat()` can use them directly.
-  const rawMessages = (body as { messages?: Array<Record<string, unknown>> }).messages ?? []
+  const rawMessages =
+    (body as { messages?: Array<Record<string, unknown>> }).messages ?? []
   const messages = parsed.messages.map((m, i) => {
     const raw = rawMessages[i]
-    if (raw && typeof raw === 'object' && 'parts' in raw && isValidParts(raw.parts)) {
+    if (
+      raw &&
+      typeof raw === 'object' &&
+      'parts' in raw &&
+      isValidParts(raw.parts)
+    ) {
       return { ...m, parts: raw.parts } as UIMessage | ModelMessage
     }
     return m as ModelMessage

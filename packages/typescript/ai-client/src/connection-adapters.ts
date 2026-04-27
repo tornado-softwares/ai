@@ -202,7 +202,12 @@ export function normalizeConnectionAdapter(
     async send(messages, data, abortSignal, runContext) {
       let hasTerminalEvent = false
       try {
-        const stream = connection.connect(messages, data, abortSignal, runContext)
+        const stream = connection.connect(
+          messages,
+          data,
+          abortSignal,
+          runContext,
+        )
         for await (const chunk of stream) {
           if (chunk.type === 'RUN_FINISHED' || chunk.type === 'RUN_ERROR') {
             hasTerminalEvent = true
